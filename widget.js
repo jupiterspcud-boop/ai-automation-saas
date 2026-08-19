@@ -206,6 +206,30 @@
       /(எது|என்ன|ஏன்|எப்படி|எந்த|சிறந்த|நல்ல|பரிந்துரை|விலை|கடன்|எவ்வளவு)/i.test(text);
   }
 
+  // Keep the visitor's original text in conversation, but store a clean
+  // canonical location in CRM for common city spellings/typos.
+  function normalizeLocation(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return raw;
+    const key = raw.toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
+    const aliases = {
+      london: "London", londan: "London", londen: "London", londn: "London", landon: "London",
+      chennai: "Chennai", madras: "Chennai",
+      bengaluru: "Bengaluru", bangalore: "Bengaluru", bengalor: "Bengaluru", bengluru: "Bengaluru",
+      mumbai: "Mumbai", bombay: "Mumbai",
+      delhi: "Delhi", dilli: "Delhi",
+      hyderabad: "Hyderabad", hydrabad: "Hyderabad", hyderbad: "Hyderabad",
+      coimbatore: "Coimbatore", coimbator: "Coimbatore",
+      madurai: "Madurai", kochi: "Kochi", trivandrum: "Thiruvananthapuram",
+      dubai: "Dubai", abu dhabi: "Abu Dhabi",
+    };
+    return aliases[key] || raw;
+  }
+
+  function purposeFallback() {
+    return "If you're buying for your own use, Own Use is usually the better fit because you plan to live there. If your goal is rental income or future appreciation, Investment is usually the better fit. Which one matches your goal?";
+  }
+
   async function askAI(text, q) {
     try {
       const res = await fetch(`${API_BASE}/businesses/${businessId}/ai-chat`, {
@@ -280,16 +304,24 @@
     const q = state.flow.questions[state.step - 1];
 
     // AI handles genuine questions without consuming the current lead-flow answer.
-    // The full conversation is retained so CRM can show every chatbot question and user answer.
+    // If AI is unavailable, purpose advice still has a deterministic fallback.
     if (q && looksLikeQuestion(val)) {
       const answeredByAI = await askAI(val, q);
       if (answeredByAI) {
         setTimeout(() => addMsg(q.text, "bot"), 250);
         return;
       }
+      if (q.id === "purpose" && /\b(best|better|which|what|recommend|option)\b/i.test(val) ||
+          (q.id === "purpose" && /(எது|என்ன|எந்த|சிறந்த|நல்ல|பரிந்துரை)/i.test(val))) {
+        addMsg(purposeFallback(), "bot");
+        setTimeout(() => addMsg(q.text, "bot"), 250);
+        return;
+      }
     }
 
-    if (q) state.answers[q.id] = val;
+    if (q) {
+      state.answers[q.id] = q.id === "location" ? normalizeLocation(val) : val;
+    }
     state.step += 1;
     setTimeout(() => askNext(), 350);
   }
