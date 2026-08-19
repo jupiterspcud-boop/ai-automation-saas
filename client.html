@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Client Dashboard — AI Automation Platform</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="login" class="login-box">
+  <div class="card">
+    <h1>Client Login</h1>
+    <p class="sub">See your leads, appointments and modules.</p>
+    <div class="field">
+      <label>Business ID</label>
+      <input type="text" id="businessId" placeholder="paste the Business ID your agency gave you" />
+    </div>
+    <div class="field">
+      <label>Passcode</label>
+      <input type="password" id="passcode" placeholder="6-character passcode" />
+    </div>
+    <button class="btn" onclick="login()" style="width:100%">Log in</button>
+    <div class="error" id="loginError"></div>
+    <p class="hint">Business ID and passcode are given to you by your automation agency when your account is set up (via the admin dashboard).</p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="topbar">
+    <div class="brand" id="bizNameTop">AI Automation <span>Client</span></div>
+    <button onclick="logout()">Log out</button>
+  </div>
+  <div class="wrap" id="content"></div>
+</div>
+
+<script src="client.js"></script>
+</body>
+</html>

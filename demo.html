@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Demo — Client Website with AI Widget</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  body { background: #fff; }
+  .hero { padding: 80px 28px; text-align: center; }
+  .hero h1 { font-size: 32px; }
+  .hero p { color: var(--gray); max-width: 480px; margin: 10px auto 0; }
+  .note { max-width: 520px; margin: 0 auto 40px; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Green Acres Realty</h1>
+    <p>This is a mock client website. The orange chat bubble bottom-right is your embedded AI Automation widget — try it.</p>
+  </div>
+  <div class="note card">
+    <p class="sub" style="margin-bottom:6px">To point this demo at a real business:</p>
+    <ol style="font-size:14px; color:var(--gray)">
+      <li>Create a business in <a href="/admin.html">the Admin dashboard</a>.</li>
+      <li>Copy its Business ID.</li>
+      <li>Replace <code>data-business-id</code> below with that ID.</li>
+    </ol>
+  </div>
+
+  <!-- The actual embed a client would paste on their real website: -->
+  <script src="/widget.js" data-business-id="DEMO_BUSINESS_ID"></script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+const API = "/api";
+let token = localStorage.getItem("clientToken") || "";
+let businessId = localStorage.getItem("clientBizId") || "";
+
+function authHeaders() {
+  return { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+}
+
+async function login() {
+  const id = document.getElementById("businessId").value.trim();
+  const passcode = document.getElementById("passcode").value.trim();
+  const res = await fetch(`${API}/auth/client/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ businessId: id, passcode }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("loginError").textContent = data.error;
+    return;
+  }
+  token = data.token;
+  businessId = id;
+  localStorage.setItem("clientToken", token);
+  localStorage.setItem("clientBizId", businessId);
+  boot();
+}
+
+function logout() {
+  localStorage.removeItem("clientToken");
+  localStorage.removeItem("clientBizId");
+  token = "";
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login").style.display = "block";
+}
+
+async function boot() {
+  document.getElementById("login").style.display = "none";
+  document.getElementById("app").style.display = "block";
+
+  const [biz, leads, appts, analytics] = await Promise.all([
+    fetch(`${API}/businesses/${businessId}`, { headers: authHeaders() }).then((r) => r.json()),
+    fetch(`${API}/businesses/${businessId}/leads`, { headers: authHeaders() }).then((r) => r.json()),
+    fetch(`${API}/businesses/${businessId}/appointments`, { headers: authHeaders() }).then((r) => r.json()),
+    fetch(`${API}/businesses/${businessId}/analytics`, { headers: authHeaders() }).then((r) => r.json()),
+  ]);
+
+  if (biz.error) return logout();
+  document.getElementById("bizNameTop").innerHTML = `${biz.name} <span>Dashboard</span>`;
+
+  const activeModules = Object.entries(biz.modules).filter(([, on]) => on).map(([k]) => moduleLabel(k));
+
+  const leadsHtml = leads.length ? `
+    <table>
+      <tr><th>Name</th><th>Phone</th><th>Score</th><th>Status</th><th>When</th></tr>
+      ${leads.map((l) => `
+        <tr>
+          <td>${l.name}</td>
+          <td>${l.phone || "—"}</td>
+          <td><span class="badge ${l.tier}">${l.tier.toUpperCase()} ${l.score}</span></td>
+          <td>
+            <select onchange="updateLeadStatus('${l.id}', this.value)">
+              ${["new","contacted","qualified","won","lost"].map(s => `<option value="${s}" ${s===l.status?"selected":""}>${s}</option>`).join("")}
+            </select>
+          </td>
+          <td>${new Date(l.createdAt).toLocaleString()}</td>
+        </tr>`).join("")}
+    </table>` : `<div class="card muted">No leads yet. Once your chatbot widget is live on your website, leads will show up here automatically.</div>`;
+
+  const apptHtml = appts.length ? `
+    <table>
+      <tr><th>Name</th><th>Phone</th><th>Date</th><th>Time</th><th>Status</th></tr>
+      ${appts.map((a) => `<tr><td>${a.name}</td><td>${a.phone || "—"}</td><td>${a.date}</td><td>${a.time || "—"}</td><td><span class="badge status">${a.status}</span></td></tr>`).join("")}
+    </table>` : `<div class="card muted">No appointments booked yet.</div>`;
+
+  document.getElementById("content").innerHTML = `
+    <div class="grid cols-4">
+      <div class="card stat"><div class="num">${analytics.totalLeads}</div><div class="label">Total Leads</div></div>
+      <div class="card stat"><div class="num">${analytics.byTier.hot || 0}</div><div class="label">Hot Leads</div></div>
+      <div class="card stat"><div class="num">${analytics.totalAppointments}</div><div class="label">Appointments</div></div>
+      <div class="card stat"><div class="num">${analytics.conversionRate}%</div><div class="label">Conversion</div></div>
+    </div>
+
+    <h2>Active Modules</h2>
+    <div class="card">${activeModules.map(m => `<span class="badge status" style="margin:4px 6px 4px 0">${m}</span>`).join("") || "<span class='muted'>None active — contact your agency.</span>"}</div>
+
+    <h2>Leads (CRM)</h2>
+    ${leadsHtml}
+
+    <h2>Appointments</h2>
+    ${apptHtml}
+  `;
+}
+
+function moduleLabel(key) {
+  const map = {
+    ai_receptionist: "AI Receptionist", whatsapp: "WhatsApp", instagram: "Instagram",
+    facebook: "Facebook", website_chat: "Website Chat", lead_capture: "Lead Capture",
+    lead_qualification: "Lead Qualification", lead_scoring: "Lead Scoring", followup: "Follow-up",
+    appointment: "Appointment Booking", crm: "CRM", payment: "Payment", invoice: "Invoice",
+    review: "Review Automation", voice_ai: "Voice AI", human_handoff: "Human Handoff",
+    analytics: "Analytics", ai_reports: "AI Reports",
+  };
+  return map[key] || key;
+}
+
+async function updateLeadStatus(leadId, status) {
+  await fetch(`${API}/leads/${leadId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+}
+
+if (token && businessId) boot();

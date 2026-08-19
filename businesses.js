@@ -1,0 +1,132 @@
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const { nanoid } = require("nanoid");
+const { transact, read } = require("../lib/db");
+const { requireAuth } = require("../lib/auth");
+const { listNiches } = require("../lib/flows");
+
+const router = express.Router();
+
+const DEFAULT_MODULES = {
+  ai_receptionist: true,
+  whatsapp: true,
+  instagram: false,
+  facebook: false,
+  website_chat: true,
+  lead_capture: true,
+  lead_qualification: true,
+  lead_scoring: true,
+  followup: false,
+  appointment: true,
+  crm: true,
+  payment: false,
+  invoice: false,
+  review: false,
+  voice_ai: false,
+  human_handoff: true,
+  analytics: true,
+  ai_reports: false,
+};
+
+const PACKAGES = {
+  starter: { label: "Starter", setup: "9,999 - 15,000", monthly: "2,999 - 4,999" },
+  growth: { label: "Growth", setup: "25,000 - 40,000", monthly: "6,999 - 9,999" },
+  pro: { label: "Pro", setup: "50,000 - 1,00,000", monthly: "12,999 - 24,999" },
+  enterprise: { label: "Enterprise", setup: "1,50,000+", monthly: "30,000+" },
+};
+
+function publicBiz(b) {
+  const { passcodeHash, ...rest } = b;
+  return rest;
+}
+
+// List reference data (niches + package tiers) — public, used by admin UI.
+router.get("/meta", (req, res) => {
+  res.json({ niches: listNiches(), packages: PACKAGES, defaultModules: DEFAULT_MODULES });
+});
+
+// Admin: list all businesses
+router.get("/", requireAuth("admin"), (req, res) => {
+  const data = read();
+  res.json(data.businesses.map(publicBiz));
+});
+
+// Admin: create a business (tenant). Returns the auto-generated passcode ONCE.
+router.post("/", requireAuth("admin"), async (req, res) => {
+  const { name, niche, package: pkg } = req.body || {};
+  if (!name) return res.status(400).json({ error: "name is required" });
+
+  const passcode = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const biz = {
+    id: nanoid(10),
+    name,
+    niche: niche && listNiches().some((n) => n.id === niche) ? niche : "generic",
+    package: PACKAGES[pkg] ? pkg : "starter",
+    modules: { ...DEFAULT_MODULES },
+    passcodeHash: bcrypt.hashSync(passcode, 8),
+    createdAt: new Date().toISOString(),
+  };
+
+  await transact((data) => data.businesses.push(biz));
+  res.status(201).json({ business: publicBiz(biz), passcode });
+});
+
+// Admin: toggle modules on/off for a business
+router.patch("/:id/modules", requireAuth("admin"), async (req, res) => {
+  const { id } = req.params;
+  const { modules } = req.body || {};
+  const result = await transact((data) => {
+    const biz = data.businesses.find((b) => b.id === id);
+    if (!biz) return null;
+    biz.modules = { ...biz.modules, ...modules };
+    return biz;
+  });
+  if (!result) return res.status(404).json({ error: "Business not found" });
+  res.json(publicBiz(result));
+});
+
+// Admin: change package tier
+router.patch("/:id/package", requireAuth("admin"), async (req, res) => {
+  const { id } = req.params;
+  const { package: pkg } = req.body || {};
+  if (!PACKAGES[pkg]) return res.status(400).json({ error: "Invalid package" });
+  const result = await transact((data) => {
+    const biz = data.businesses.find((b) => b.id === id);
+    if (!biz) return null;
+    biz.package = pkg;
+    return biz;
+  });
+  if (!result) return res.status(404).json({ error: "Business not found" });
+  res.json(publicBiz(result));
+});
+
+// Public: minimal config the embeddable widget needs (no auth — it runs on
+// the client's public website). Only exposes what's safe to expose.
+router.get("/:id/public-config", (req, res) => {
+  const data = read();
+  const biz = data.businesses.find((b) => b.id === req.params.id);
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  res.json({
+    id: biz.id,
+    name: biz.name,
+    niche: biz.niche,
+    modulesEnabled: {
+      website_chat: !!biz.modules.website_chat,
+      ai_receptionist: !!biz.modules.ai_receptionist,
+      appointment: !!biz.modules.appointment,
+    },
+  });
+});
+
+// Authenticated: full business detail (admin, or the business's own client login)
+router.get("/:id", requireAuth(), (req, res) => {
+  if (req.user.role === "client" && req.user.businessId !== req.params.id) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  const data = read();
+  const biz = data.businesses.find((b) => b.id === req.params.id);
+  if (!biz) return res.status(404).json({ error: "Business not found" });
+  res.json(publicBiz(biz));
+});
+
+module.exports = router;
