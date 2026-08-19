@@ -18,7 +18,6 @@
   const ORANGE = "#d9622b";
   const DARK = "#1f1f1f";
 
-  // ---------- inject styles ----------
   const style = document.createElement("style");
   style.textContent = `
     .aiw-bubble { position: fixed; bottom: 22px; right: 22px; width: 58px; height: 58px;
@@ -42,7 +41,6 @@
   `;
   document.head.appendChild(style);
 
-  // ---------- build DOM ----------
   const bubble = document.createElement("button");
   bubble.className = "aiw-bubble";
   bubble.innerHTML = "💬";
@@ -128,6 +126,19 @@
     input.placeholder = "Conversation complete";
   }
 
+  function isRecommendationQuestion(text) {
+    return /\b(best|better|recommend|recommended|which|option)\b/i.test(text) ||
+      /(எது|என்ன|சிறந்த|நல்ல|பரிந்துரை|எந்த).*(best|better|option|சிறந்த|நல்ல)/i.test(text) ||
+      /(எது|என்ன|சிறந்த|நல்ல|பரிந்துரை)/i.test(text);
+  }
+
+  function handlePurposeRecommendation() {
+    addMsg(
+      "It depends on your goal 🙂 If you're buying for your own living, Own Use is usually the better fit. If you're looking for rental income or future returns, Investment may be better. Which one matches your goal?",
+      "bot"
+    );
+  }
+
   function handleSend() {
     const val = input.value.trim();
     if (!val) return;
@@ -136,10 +147,22 @@
 
     if (state.step === 0) {
       state.name = val;
-    } else {
-      const q = state.flow.questions[state.step - 1];
-      if (q) state.answers[q.id] = val;
+      state.step += 1;
+      setTimeout(() => askNext(), 350);
+      return;
     }
+
+    const q = state.flow.questions[state.step - 1];
+
+    // For the Real Estate purpose question, don't treat a recommendation
+    // request such as "Which is best?" as the user's actual answer. Explain
+    // both options and ask the same question again instead of skipping ahead.
+    if (q && q.id === "purpose" && isRecommendationQuestion(val)) {
+      setTimeout(() => handlePurposeRecommendation(), 350);
+      return;
+    }
+
+    if (q) state.answers[q.id] = val;
     state.step += 1;
     setTimeout(() => askNext(), 350);
   }
