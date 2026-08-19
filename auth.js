@@ -1,11 +1,10 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const { transact } = require("../lib/db");
-const { sign } = require("../lib/auth");
+const { transact } = require("./db");
+const { sign } = require("./auth-helper");
 
 const router = express.Router();
 
-// Demo super-admin login. Change ADMIN_PASSWORD via env var before deploying.
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD || "admin123", 8);
 
@@ -18,7 +17,6 @@ router.post("/admin/login", (req, res) => {
   res.json({ token, role: "admin" });
 });
 
-// Business-owner login: each business gets a passcode when the admin creates it.
 router.post("/client/login", async (req, res) => {
   const { businessId, passcode } = req.body || {};
   const result = await transact((data) => {
