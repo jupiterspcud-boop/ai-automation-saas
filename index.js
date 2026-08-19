@@ -9,25 +9,23 @@ const appointmentRoutes = require("./routes/appointments");
 const chatbotRoutes = require("./routes/chatbot");
 
 const app = express();
-app.use(cors()); // widget runs on 3rd-party client websites, so CORS must stay open
+app.use(cors());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/businesses", businessRoutes);
-app.use("/api", leadRoutes); // /api/businesses/:id/leads, /api/leads/:id
-app.use("/api", appointmentRoutes); // /api/businesses/:id/appointments
-app.use("/api", chatbotRoutes); // /api/businesses/:id/chatbot-flow
+app.use("/api", leadRoutes);
+app.use("/api", appointmentRoutes);
+app.use("/api", chatbotRoutes);
 
-app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+app.get("/api/health", (req, res) =>
+  res.json({ ok: true, time: new Date().toISOString() })
+);
 
-// Serve the dashboards + embeddable widget as static files
-app.use(express.static(path.join(__dirname, "..", "public")));
+// Static HTML/CSS/JS files are stored at the repository root.
+app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\nAI Automation SaaS platform running:`);
-  console.log(`  Admin dashboard  -> http://localhost:${PORT}/admin.html`);
-  console.log(`  Client dashboard -> http://localhost:${PORT}/client.html`);
-  console.log(`  Widget demo page -> http://localhost:${PORT}/demo.html`);
-  console.log(`  Default admin login -> admin / admin123 (change via env vars!)\n`);
+  console.log(`AI Automation SaaS platform running on port ${PORT}`);
 });
