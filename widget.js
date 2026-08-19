@@ -66,24 +66,26 @@
   const input = win.querySelector("#aiw-input");
   const sendBtn = win.querySelector("#aiw-send");
 
+  const state = {
+    started: false,
+    flow: null,
+    step: 0,
+    answers: {},
+    conversation: [],
+    name: "",
+    phase: "lead",
+    appointment: { date: "", time: "", notes: "" },
+    appointmentStep: 0,
+  };
+
   function addMsg(text, who) {
     const m = document.createElement("div");
     m.className = "aiw-msg " + who;
     m.textContent = text;
     body.appendChild(m);
     body.scrollTop = body.scrollHeight;
+    state.conversation.push({ role: who === "bot" ? "assistant" : "user", text: String(text) });
   }
-
-  const state = {
-    started: false,
-    flow: null,
-    step: 0,
-    answers: {},
-    name: "",
-    phase: "lead",
-    appointment: { date: "", time: "", notes: "" },
-    appointmentStep: 0,
-  };
 
   async function startFlow() {
     state.started = true;
@@ -118,6 +120,7 @@
           name: state.name,
           phone: state.answers.phone || "",
           answers: state.answers,
+          conversation: state.conversation,
           source: "website_chat",
         }),
       });
@@ -274,7 +277,7 @@
     const q = state.flow.questions[state.step - 1];
 
     // AI handles genuine questions without consuming the current lead-flow answer.
-    // If AI is not configured or fails, the original controlled flow continues unchanged.
+    // The full conversation is retained so CRM can show every chatbot question and user answer.
     if (q && looksLikeQuestion(val)) {
       const answeredByAI = await askAI(val, q);
       if (answeredByAI) {
