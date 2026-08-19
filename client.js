@@ -12,14 +12,11 @@ function openChatbotPreview(){
   const box=document.createElement("div");box.style="position:relative;width:min(760px,100%);height:min(700px,92vh);background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);";
   box.innerHTML=`<div style="height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid #eee;font-weight:700;font-family:system-ui"><span>Chatbot Preview</span><button id="closeChatPreview" style="border:0;background:#eee;border-radius:8px;padding:7px 11px;cursor:pointer">Close</button></div><div id="chatPreviewHost" style="position:absolute;top:54px;left:0;right:0;bottom:0;background:#faf8f5"></div>`;
   overlay.appendChild(box);document.body.appendChild(overlay);document.getElementById("closeChatPreview").onclick=()=>overlay.remove();
-  const host=document.getElementById("chatPreviewHost");
   const frame=document.createElement("iframe");
   frame.title="Chatbot Preview";
   frame.style="width:100%;height:100%;border:0;background:#faf8f5;display:block;";
-  const origin=JSON.stringify(location.origin);
-  const id=JSON.stringify(businessId);
-  frame.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#faf8f5"><script src=${origin+"/widget.js"} data-business-id=${id}><\/script></body></html>`;
-  host.appendChild(frame);
+  frame.src=`/chatbot-preview.html?businessId=${encodeURIComponent(businessId)}`;
+  document.getElementById("chatPreviewHost").appendChild(frame);
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"]|'/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));}
 function renderLeadConversation(lead){
