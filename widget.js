@@ -72,6 +72,7 @@
     step: 0,
     answers: {},
     conversation: [],
+    leadSaved: false,
     name: "",
     phase: "lead",
     appointment: { date: "", time: "", notes: "" },
@@ -111,6 +112,7 @@
   }
 
   async function saveLead() {
+    if (state.leadSaved) return null;
     if (state.flow.modulesEnabled && state.flow.modulesEnabled.lead_capture === false) return null;
     try {
       const res = await fetch(`${API_BASE}/businesses/${businessId}/leads`, {
@@ -127,6 +129,7 @@
       if (!res.ok) return null;
       const data = await res.json();
       if (data.lead) {
+        state.leadSaved = true;
         const doneMsg = document.createElement("div");
         doneMsg.className = "aiw-done";
         doneMsg.textContent = "✓ Your details have been saved.";
@@ -139,20 +142,20 @@
   }
 
   async function finishLead() {
-    state.phase = "saving";
-    await saveLead();
-
     const canBook = !!(state.flow.modulesEnabled && state.flow.modulesEnabled.appointment);
     if (canBook) {
       state.phase = "appointment_offer";
       addMsg("Would you like to book an appointment? (Yes / No)", "bot");
       return;
     }
-    finishConversation();
+    await finishConversation();
   }
 
-  function finishConversation() {
+  async function finishConversation() {
+    if (state.phase === "done" || state.phase === "saving") return;
     addMsg("Thank you! Our team will reach out to you shortly. 🙌", "bot");
+    state.phase = "saving";
+    await saveLead();
     state.phase = "done";
     input.disabled = true;
     sendBtn.disabled = true;
@@ -194,7 +197,7 @@
     } catch (e) {
       addMsg("I couldn't complete the appointment booking right now. Our team will contact you shortly.", "bot");
     }
-    finishConversation();
+    await finishConversation();
   }
 
   function looksLikeQuestion(text) {
@@ -226,7 +229,7 @@
 
   async function handleAppointmentOffer(val) {
     if (/^(no|n|இல்லை|வேண்டாம்|vena|vendam)$/i.test(val)) {
-      finishConversation();
+      await finishConversation();
       return;
     }
     if (/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum|venam)$/i.test(val)) {
