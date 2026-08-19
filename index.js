@@ -1,12 +1,11 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
-const authRoutes = require("./routes/auth");
-const businessRoutes = require("./routes/businesses");
-const leadRoutes = require("./routes/leads");
-const appointmentRoutes = require("./routes/appointments");
-const chatbotRoutes = require("./routes/chatbot");
+const authRoutes = require("./auth");
+const businessRoutes = require("./businesses");
+const leadRoutes = require("./leads");
+const appointmentRoutes = require("./appointments");
+const chatbotRoutes = require("./chatbot");
 
 const app = express();
 app.use(cors());
@@ -22,7 +21,6 @@ app.get("/api/health", (req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
 
-// Static HTML/CSS/JS files are stored at the repository root.
 app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 3000;
