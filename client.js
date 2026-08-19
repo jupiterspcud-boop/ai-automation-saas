@@ -13,7 +13,13 @@ function openChatbotPreview(){
   box.innerHTML=`<div style="height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid #eee;font-weight:700;font-family:system-ui"><span>Chatbot Preview</span><button id="closeChatPreview" style="border:0;background:#eee;border-radius:8px;padding:7px 11px;cursor:pointer">Close</button></div><div id="chatPreviewHost" style="position:absolute;top:54px;left:0;right:0;bottom:0;background:#faf8f5"></div>`;
   overlay.appendChild(box);document.body.appendChild(overlay);document.getElementById("closeChatPreview").onclick=()=>overlay.remove();
   const host=document.getElementById("chatPreviewHost");
-  const s=document.createElement("script");s.src="/widget.js";s.setAttribute("data-business-id",businessId);host.appendChild(s);
+  const frame=document.createElement("iframe");
+  frame.title="Chatbot Preview";
+  frame.style="width:100%;height:100%;border:0;background:#faf8f5;display:block;";
+  const origin=JSON.stringify(location.origin);
+  const id=JSON.stringify(businessId);
+  frame.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#faf8f5"><script src=${origin+"/widget.js"} data-business-id=${id}><\/script></body></html>`;
+  host.appendChild(frame);
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"]|'/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));}
 function renderLeadConversation(lead){
