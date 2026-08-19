@@ -2,10 +2,10 @@
   "name": "ai-automation-saas",
   "version": "1.0.0",
   "description": "Multi-tenant AI Automation SaaS core platform (leads, CRM, appointments, chatbot widget)",
-  "main": "server/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
     "express": "^4.19.2",
