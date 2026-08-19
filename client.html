@@ -1,39 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Client Dashboard — AI Automation Platform</title>
-<link rel="stylesheet" href="style.css" />
-</head>
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Client Dashboard — AI Automation Platform</title><link rel="stylesheet" href="style.css" /></head>
 <body>
-
-<div id="login" class="login-box">
-  <div class="card">
-    <h1>Client Login</h1>
-    <p class="sub">See your leads, appointments and modules.</p>
-    <div class="field">
-      <label>Business ID</label>
-      <input type="text" id="businessId" placeholder="paste the Business ID your agency gave you" />
-    </div>
-    <div class="field">
-      <label>Passcode</label>
-      <input type="password" id="passcode" placeholder="6-character passcode" />
-    </div>
-    <button class="btn" onclick="login()" style="width:100%">Log in</button>
-    <div class="error" id="loginError"></div>
-    <p class="hint">Business ID and passcode are given to you by your automation agency when your account is set up (via the admin dashboard).</p>
-  </div>
-</div>
-
-<div id="app" style="display:none">
-  <div class="topbar">
-    <div class="brand" id="bizNameTop">AI Automation <span>Client</span></div>
-    <button onclick="logout()">Log out</button>
-  </div>
-  <div class="wrap" id="content"></div>
-</div>
-
-<script src="client.js"></script>
-</body>
-</html>
+<div id="login" class="login-box"><div class="card">
+<h1>Client Login</h1><p class="sub">See your leads, appointments and modules.</p>
+<div class="field"><label>Business ID</label><input type="text" id="businessId" placeholder="Business ID from your agency" /></div>
+<div class="field"><label>Password</label><input type="password" id="password" placeholder="Your password" /></div>
+<button class="btn" onclick="login()" style="width:100%">Log in</button>
+<div class="error" id="loginError"></div>
+<p class="hint">First time here? <a href="#" onclick="showSetup();return false;">Set your password</a></p>
+</div></div>
+<div id="setup" class="login-box" style="display:none"><div class="card">
+<h1>Set Your Password</h1><p class="sub">Use the one-time setup passcode given by your agency, then choose your own password.</p>
+<div class="field"><label>Business ID</label><input type="text" id="setupBusinessId" placeholder="Business ID" /></div>
+<div class="field"><label>Setup Passcode</label><input type="password" id="setupPasscode" placeholder="Passcode from your agency" /></div>
+<div class="field"><label>New Password</label><input type="password" id="setupPassword" placeholder="At least 6 characters" /></div>
+<button class="btn" onclick="setupPassword()" style="width:100%">Set Password & Log in</button>
+<div class="error" id="setupError"></div><p class="hint"><a href="#" onclick="showLogin();return false;">Back to login</a></p>
+</div></div>
+<div id="app" style="display:none"><div class="topbar"><div class="brand" id="bizNameTop">AI Automation <span>Client</span></div><button onclick="logout()">Log out</button></div><div class="wrap" id="content"></div></div>
+<script src="client.js"></script></body></html>
