@@ -74,7 +74,16 @@
     body.scrollTop = body.scrollHeight;
   }
 
-  const state = { started: false, flow: null, step: 0, answers: {}, name: "" };
+  const state = {
+    started: false,
+    flow: null,
+    step: 0,
+    answers: {},
+    name: "",
+    phase: "lead",
+    appointment: { date: "", time: "", notes: "" },
+    appointmentStep: 0,
+  };
 
   async function startFlow() {
     state.started = true;
@@ -95,12 +104,12 @@
       return;
     }
     const q = state.flow.questions[state.step - 1];
-    if (!q) return finish();
+    if (!q) return finishLead();
     addMsg(q.text, "bot");
   }
 
-  async function finish() {
-    addMsg("Thank you! Our team will reach out to you shortly. 🙌", "bot");
+  async function saveLead() {
+    if (state.flow.modulesEnabled && state.flow.modulesEnabled.lead_capture === false) return null;
     try {
       const res = await fetch(`${API_BASE}/businesses/${businessId}/leads`, {
         method: "POST",
@@ -112,6 +121,7 @@
           source: "website_chat",
         }),
       });
+      if (!res.ok) return null;
       const data = await res.json();
       if (data.lead) {
         const doneMsg = document.createElement("div");
@@ -119,10 +129,69 @@
         doneMsg.textContent = "✓ Your details have been saved.";
         body.appendChild(doneMsg);
       }
-    } catch (e) { /* fail silently for the visitor */ }
+      return data.lead || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function finishLead() {
+    state.phase = "saving";
+    await saveLead();
+
+    const canBook = !!(state.flow.modulesEnabled && state.flow.modulesEnabled.appointment);
+    if (canBook) {
+      state.phase = "appointment_offer";
+      addMsg("Would you like to book an appointment? (Yes / No)", "bot");
+      return;
+    }
+    finishConversation();
+  }
+
+  function finishConversation() {
+    addMsg("Thank you! Our team will reach out to you shortly. 🙌", "bot");
+    state.phase = "done";
     input.disabled = true;
     sendBtn.disabled = true;
     input.placeholder = "Conversation complete";
+  }
+
+  function askAppointmentNext() {
+    if (state.appointmentStep === 0) {
+      addMsg("What date would you prefer? (YYYY-MM-DD)", "bot");
+      return;
+    }
+    if (state.appointmentStep === 1) {
+      addMsg("What time would you prefer?", "bot");
+      return;
+    }
+    if (state.appointmentStep === 2) {
+      addMsg("Any note for the team? (Optional — type No if none)", "bot");
+      return;
+    }
+  }
+
+  async function bookAppointment() {
+    state.phase = "booking";
+    try {
+      const res = await fetch(`${API_BASE}/businesses/${businessId}/appointments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: state.name,
+          phone: state.answers.phone || "",
+          date: state.appointment.date,
+          time: state.appointment.time,
+          notes: state.appointment.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.appointment) throw new Error("booking failed");
+      addMsg(`Appointment booked for ${state.appointment.date} at ${state.appointment.time}. ✅`, "bot");
+    } catch (e) {
+      addMsg("I couldn't complete the appointment booking right now. Our team will contact you shortly.", "bot");
+    }
+    finishConversation();
   }
 
   function looksLikeQuestion(text) {
@@ -152,11 +221,48 @@
     }
   }
 
+  async function handleAppointmentOffer(val) {
+    if (/^(no|n|இல்லை|வேண்டாம்|vena|vendam)$/i.test(val)) {
+      finishConversation();
+      return;
+    }
+    if (/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum|venam)$/i.test(val)) {
+      state.phase = "appointment";
+      state.appointmentStep = 0;
+      askAppointmentNext();
+      return;
+    }
+    addMsg("Please type Yes or No.", "bot");
+  }
+
+  async function handleAppointment(val) {
+    if (state.appointmentStep === 0) state.appointment.date = val;
+    else if (state.appointmentStep === 1) state.appointment.time = val;
+    else state.appointment.notes = /^(no|none|இல்லை|வேண்டாம்)$/i.test(val) ? "" : val;
+
+    state.appointmentStep += 1;
+    if (state.appointmentStep <= 2) {
+      setTimeout(() => askAppointmentNext(), 250);
+      return;
+    }
+    await bookAppointment();
+  }
+
   async function handleSend() {
     const val = input.value.trim();
-    if (!val) return;
+    if (!val || state.phase === "done" || state.phase === "saving" || state.phase === "booking") return;
     addMsg(val, "user");
     input.value = "";
+
+    if (state.phase === "appointment_offer") {
+      await handleAppointmentOffer(val);
+      return;
+    }
+
+    if (state.phase === "appointment") {
+      await handleAppointment(val);
+      return;
+    }
 
     if (state.step === 0) {
       state.name = val;
