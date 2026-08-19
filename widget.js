@@ -2,8 +2,7 @@
  * AI Automation Platform — embeddable chatbot widget.
  * Usage: <script src="https://YOUR_DOMAIN/widget.js" data-business-id="xxxx"></script>
  * Runs entirely client-side; talks only to the public, unauthenticated
- * endpoints (/chatbot-flow, /leads, /appointments) — safe to embed on any
- * public website.
+ * endpoints (/chatbot-flow, /leads, /appointments, /ai-chat) — safe to embed on any public website.
  */
 (function () {
   const scriptTag = document.currentScript;
@@ -126,20 +125,34 @@
     input.placeholder = "Conversation complete";
   }
 
-  function isRecommendationQuestion(text) {
-    return /\b(best|better|recommend|recommended|which|option)\b/i.test(text) ||
-      /(எது|என்ன|சிறந்த|நல்ல|பரிந்துரை|எந்த).*(best|better|option|சிறந்த|நல்ல)/i.test(text) ||
-      /(எது|என்ன|சிறந்த|நல்ல|பரிந்துரை)/i.test(text);
+  function looksLikeQuestion(text) {
+    return /[?？]/.test(text) ||
+      /\b(best|better|which|what|why|how|recommend|recommended|option|price|cost|loan|emi)\b/i.test(text) ||
+      /(எது|என்ன|ஏன்|எப்படி|எந்த|சிறந்த|நல்ல|பரிந்துரை|விலை|கடன்|எவ்வளவு)/i.test(text);
   }
 
-  function handlePurposeRecommendation() {
-    addMsg(
-      "It depends on your goal 🙂 If you're buying for your own living, Own Use is usually the better fit. If you're looking for rental income or future returns, Investment may be better. Which one matches your goal?",
-      "bot"
-    );
+  async function askAI(text, q) {
+    try {
+      const res = await fetch(`${API_BASE}/businesses/${businessId}/ai-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          currentQuestion: q ? q.text : "",
+          answers: state.answers,
+        }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.answer) return false;
+      addMsg(data.answer, "bot");
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  function handleSend() {
+  async function handleSend() {
     const val = input.value.trim();
     if (!val) return;
     addMsg(val, "user");
@@ -154,12 +167,14 @@
 
     const q = state.flow.questions[state.step - 1];
 
-    // For the Real Estate purpose question, don't treat a recommendation
-    // request such as "Which is best?" as the user's actual answer. Explain
-    // both options and ask the same question again instead of skipping ahead.
-    if (q && q.id === "purpose" && isRecommendationQuestion(val)) {
-      setTimeout(() => handlePurposeRecommendation(), 350);
-      return;
+    // AI handles genuine questions without consuming the current lead-flow answer.
+    // If AI is not configured or fails, the original controlled flow continues unchanged.
+    if (q && looksLikeQuestion(val)) {
+      const answeredByAI = await askAI(val, q);
+      if (answeredByAI) {
+        setTimeout(() => addMsg(q.text, "bot"), 250);
+        return;
+      }
     }
 
     if (q) state.answers[q.id] = val;
