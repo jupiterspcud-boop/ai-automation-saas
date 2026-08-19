@@ -7,72 +7,10 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-<div id="login" class="login-box">
-  <div class="card">
-    <h1>Admin Login</h1>
-    <p class="sub">Manage every client business from here.</p>
-    <div class="field">
-      <label>Username</label>
-      <input type="text" id="username" value="admin" />
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="password" value="admin123" />
-    </div>
-    <button class="btn" onclick="login()" style="width:100%">Log in</button>
-    <div class="error" id="loginError"></div>
-    <p class="hint">Demo credentials: admin / admin123 — change these via ADMIN_USER / ADMIN_PASSWORD environment variables before deploying.</p>
-  </div>
-</div>
-
-<div id="app" style="display:none">
-  <div class="topbar">
-    <div class="brand">AI Automation <span>Admin</span></div>
-    <button onclick="logout()">Log out</button>
-  </div>
-
-  <div class="wrap">
-    <div class="flex between">
-      <div>
-        <h1>Businesses</h1>
-        <p class="sub">Every client using your AI automation platform.</p>
-      </div>
-      <button class="btn" onclick="openCreate()">+ New Business</button>
-    </div>
-
-    <div id="businessList"></div>
-  </div>
-</div>
-
-<!-- Create business modal (simple inline panel, not a real modal library) -->
-<div id="createPanel" class="wrap" style="display:none; max-width:520px;">
-  <div class="card">
-    <h1>New Business</h1>
-    <div class="field">
-      <label>Business Name</label>
-      <input type="text" id="bizName" placeholder="e.g. Green Acres Realty" />
-    </div>
-    <div class="field">
-      <label>Niche (drives the chatbot question flow)</label>
-      <select id="bizNiche"></select>
-    </div>
-    <div class="field">
-      <label>Package</label>
-      <select id="bizPackage"></select>
-    </div>
-    <button class="btn" onclick="createBusiness()">Create</button>
-    <button class="btn secondary" onclick="closeCreate()">Cancel</button>
-    <div id="createResult"></div>
-  </div>
-</div>
-
-<!-- Business detail: modules + leads -->
-<div id="detailPanel" class="wrap" style="display:none;">
-  <button class="btn secondary" onclick="backToList()">&larr; Back</button>
-  <div id="detailContent"></div>
-</div>
-
+<div id="login" class="login-box"><div class="card"><h1>Admin Login</h1><p class="sub">Manage every client business from here.</p><div class="field"><label>Username</label><input type="text" id="username" value="admin" /></div><div class="field"><label>Password</label><input type="password" id="password" value="admin123" /></div><button class="btn" onclick="login()" style="width:100%">Log in</button><div class="error" id="loginError"></div></div></div>
+<div id="app" style="display:none"><div class="topbar"><div class="brand">AI Automation <span>Admin</span></div><button onclick="logout()">Log out</button></div><div class="wrap"><div class="flex between"><div><h1>Businesses</h1><p class="sub">Every client using your AI automation platform.</p></div><button class="btn" onclick="openCreate()">+ New Business</button></div><div id="businessList"></div></div></div>
+<div id="createPanel" class="wrap" style="display:none; max-width:520px;"><div class="card"><h1>New Business</h1><div class="field"><label>Business Name</label><input type="text" id="bizName" placeholder="e.g. Green Acres Realty" /></div><div class="field"><label>Business ID (optional)</label><input type="text" id="bizId" placeholder="e.g. jupiter001 — leave empty to auto-generate" /></div><div class="field"><label>Client Passcode (optional)</label><input type="text" id="bizPasscode" placeholder="e.g. 123456 — leave empty to auto-generate" /></div><div class="field"><label>Niche (drives the chatbot question flow)</label><select id="bizNiche"></select></div><div class="field"><label>Package</label><select id="bizPackage"></select></div><button class="btn" onclick="createBusiness()">Create</button><button class="btn secondary" onclick="closeCreate()">Cancel</button><div id="createResult"></div></div></div>
+<div id="detailPanel" class="wrap" style="display:none;"><button class="btn secondary" onclick="backToList()">&larr; Back</button><div id="detailContent"></div></div>
 <script src="admin.js"></script>
 </body>
 </html>
