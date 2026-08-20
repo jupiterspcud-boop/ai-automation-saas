@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const { transact, read } = require("./db");
 
 const authRoutes = require("./auth");
 const businessRoutes = require("./businesses");
@@ -25,7 +27,47 @@ app.get("/api/health", (req, res) =>
 
 app.use(express.static(__dirname));
 
+async function ensureVoxBridgeBusiness() {
+  const exists = read().businesses.some(b => b.id === "voxbridge");
+  if (exists) return;
+  await transact(data => {
+    if (data.businesses.some(b => b.id === "voxbridge")) return;
+    data.businesses.push({
+      id: "voxbridge",
+      name: "VoxBridge",
+      niche: "generic",
+      package: "starter",
+      modules: {
+        ai_receptionist: true,
+        whatsapp: false,
+        instagram: false,
+        facebook: false,
+        website_chat: true,
+        lead_capture: true,
+        lead_qualification: true,
+        lead_scoring: true,
+        followup: false,
+        appointment: true,
+        crm: true,
+        payment: false,
+        invoice: false,
+        review: false,
+        voice_ai: false,
+        human_handoff: true,
+        analytics: true,
+        ai_reports: false
+      },
+      passcodeHash: bcrypt.hashSync("VOXBRIDGE-SETUP", 8),
+      createdAt: new Date().toISOString()
+    });
+  });
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`AI Automation SaaS platform running on port ${PORT}`);
-});
+ensureVoxBridgeBusiness()
+  .catch(err => console.error("Unable to initialize VoxBridge:", err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`AI Automation SaaS platform running on port ${PORT}`);
+    });
+  });
