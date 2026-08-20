@@ -19,18 +19,36 @@ router.post("/businesses/:businessId/ai-chat", async (req, res) => {
 
   const flow = getFlow(biz.niche);
   const question = String(req.body?.currentQuestion || "").trim();
+  const questionId = String(req.body?.currentQuestionId || "").trim();
   const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
 
-  const system = `You are the helpful AI assistant for ${biz.name}, a ${flow.label} business.
-Answer the visitor's question briefly and naturally. Use only information supplied in this prompt; never invent business-specific prices, properties, guarantees, availability, phone numbers, or policies.
-If the visitor asks for advice such as "which is better", "what is best", "which option should I choose", or Tamil equivalents such as "எது best", explain the relevant options in simple language and give a practical general recommendation based on the visitor's stated goal. Do not pretend to know a specific property or business offering.
-For the Real Estate purpose question, explain the difference between Own Use and Investment. Own Use is generally better when the buyer plans to live in the property; Investment is generally better when the goal is rental income or future appreciation. Then ask which goal matches them.
-The website chatbot is collecting a lead, so do not end the conversation or ask for unrelated contact details. The existing question flow remains in control.
-Current chatbot question: ${question || "none"}
-Collected answers: ${JSON.stringify(answers)}`;
+  const siteContext = biz.id === "voxbridge"
+    ? [
+        "VoxBridge provides AI-powered video dubbing and live streaming solutions.",
+        "The website describes creating multilingual versions of videos while preserving a natural viewing experience.",
+        "The website also describes real-time live streaming and helping content reach audiences across languages.",
+        "No public service pricing, delivery guarantee, availability schedule, phone number, or specific customer offer is provided to the assistant."
+      ].join(" ")
+    : `No additional business-specific facts are available beyond the business name (${biz.name}), niche (${flow.label}), and the configured lead questions.`;
+
+  const system = `You are the website chatbot for ${biz.name}, a ${flow.label} business.
+${siteContext}
+
+The chatbot is currently collecting a lead. The current lead question is: ${question || "none"} (id: ${questionId || "none"}). Collected answers so far: ${JSON.stringify(answers)}.
+
+Answer the visitor's MESSAGE only when it is actually a question. Keep the answer short, useful and natural. Then stop; the website widget will repeat the current lead question automatically.
+
+Rules:
+1. Never invent business-specific prices, discounts, properties, appointment availability, delivery dates, guarantees, phone numbers, policies, or services that are not in the supplied context.
+2. If the visitor asks about VoxBridge services, use only the supplied VoxBridge context. If they ask for pricing, say that pricing depends on scope/requirements and ask them to provide their requirement or budget; never invent a number.
+3. If the visitor asks "which is better", "what is best", "எது best", "எது நல்லது", or similar, explain the relevant options using the visitor's stated goal. For Real Estate purpose, Own Use is generally for living in the property; Investment is generally for rental income or future appreciation.
+4. If the visitor asks how to do something, explain the general process briefly without pretending the business has a feature that was not supplied.
+5. Do not treat the visitor's question as their answer to the current lead field. Do not ask for unrelated contact information.
+6. Match the visitor's language when practical (English, Tamil, or Tanglish). Do not switch to a long formal response.
+7. If the message is not a real question, do not reinterpret it; give a very short acknowledgement only if needed.
+`;
 
   try {
-    // Prefer Gemini because the deployed Render service is configured with GEMINI_API_KEY.
     if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
       const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -40,7 +58,7 @@ Collected answers: ${JSON.stringify(answers)}`;
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: message }] }],
-          generationConfig: { maxOutputTokens: 220, temperature: 0.3 },
+          generationConfig: { maxOutputTokens: 180, temperature: 0.15 },
         }),
       });
 
@@ -55,7 +73,6 @@ Collected answers: ${JSON.stringify(answers)}`;
       return res.json({ enabled: true, answer: text });
     }
 
-    // Backward-compatible OpenAI fallback if a deployment still uses OPENAI_API_KEY.
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -66,7 +83,7 @@ Collected answers: ${JSON.stringify(answers)}`;
         model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
         instructions: system,
         input: message,
-        max_output_tokens: 220,
+        max_output_tokens: 180,
       }),
     });
 
