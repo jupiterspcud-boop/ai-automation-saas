@@ -123,21 +123,44 @@
     input.placeholder = "Conversation complete";
   }
 
-  // Detect normal English, Tamil and Tanglish questions before saving an answer.
-  // This intentionally covers phrases such as "enna venum", "ethu best",
-  // "epdi pannuva", "sollunga", "enna price", "which is better", etc.
+  // Question detection must be conservative. The old version treated words
+  // such as "will", "can", "venum" and "pannu" anywhere in an answer as a
+  // question. That caused valid answers to be rejected or sent to the AI.
   function looksLikeQuestion(text) {
     const t = String(text || "").trim().toLowerCase();
     if (!t) return false;
     if (/[?？]/.test(t)) return true;
-    const words = t.replace(/[^a-z0-9\u0B80-\u0BFF₹$%\s]/gi, " ").split(/\s+/).filter(Boolean);
-    const questionWords = [
-      "what","whats","which","why","how","when","where","who","whose","can","could","would","should","is","are","do","does","did","will","shall","may","best","better","recommend","recommendation","price","cost","rate","detail","details","explain","tell","suggest","option","options",
-      "enna","ennanga","ethenna","ethu","edhu","entha","ethanai","epdi","eppadi","eppo","engae","enga","yaaru","yaru","yen","yean","sollu","sollunga","sollungalen","venuma","venumaa","pannalama","pannalaama","pannu","pannuva","pannuvanga","kidaikuma","kidaikkuma","mudiyuma","mudiyumaa","evlo","evalo","vilai","rate","best"
+
+    const clean = t.replace(/[^a-z0-9\u0B80-\u0BFF₹$%\s]/gi, " ").replace(/\s+/g, " ").trim();
+    const words = clean.split(" ").filter(Boolean);
+    if (!words.length) return false;
+
+    const first = words[0];
+    const leadingQuestionWords = new Set([
+      "what","whats","which","why","how","when","where","who","whose",
+      "can","could","would","should","is","are","do","does","did","will","shall","may",
+      "enna","ennanga","ethenna","ethu","edhu","entha","ethanai","epdi","eppadi","eppo",
+      "engae","enga","yaaru","yaru","yen","yean","evlo","evalo","sollu","sollunga",
+      "sollungalen","neeye","nee","which"
+    ]);
+    if (leadingQuestionWords.has(first)) return true;
+
+    const joined = words.join(" ");
+    const questionPhrases = [
+      "neeye sollu", "nee sollu", "what is", "what are", "what does", "how does", "how much",
+      "how many", "which is", "which one", "can you", "could you", "should i", "tell me",
+      "explain", "recommend", "what price", "what cost", "enna price", "enna vilai", "ethu best",
+      "edhu best", "entha option", "entha one", "epdi pann", "eppadi pann", "eppo venum", "evlo aagum"
     ];
-    if (words.some(w => questionWords.includes(w))) return true;
-    // Common Tamil/Tanglish question endings.
-    if (/(^|\s)(aa|ah|a|ma|mma|nu|ngala|ngalaa|la|le|ya)\s*$/i.test(t) && words.length >= 2) return true;
+    if (questionPhrases.some(p => joined === p || joined.startsWith(p + " "))) return true;
+
+    // Common Tamil/Tanglish question endings, but only when the phrase is
+    // clearly interrogative. Do not treat normal answer words like "venum"
+    // or "pannuva" as questions by themselves.
+    if (words.length >= 2 && /(aa|ah|a|ma|mma|ngala|ngalaa|ya)$/i.test(first)) return true;
+    if (words.length >= 2 && /(aa|ah|a|ma|mma|ngala|ngalaa|ya)$/i.test(words[words.length - 1]) &&
+        /\b(ethu|edhu|enna|entha|epdi|eppo|evlo|yaaru|enga|sollu|sollunga|best|price|cost)\b/i.test(joined)) return true;
+
     return false;
   }
 
@@ -176,7 +199,6 @@
     const v = String(value || "").trim();
     const type = questionType(q);
     if (!v) return { ok:false, message:"Please enter an answer so I can continue." };
-    if (looksLikeQuestion(v)) return { ok:false, question:true };
 
     if (type === "phone") {
       const digits = v.replace(/\D/g, "");
@@ -205,13 +227,14 @@
     }
 
     if (type === "budget") {
-      // Do not accept vague/invalid entries such as "500 cash".
-      // Accept ₹50 lakh, 50L, 1 crore, 1cr, 5000000, etc.
+      // Accept normal currency forms used by visitors: 200 rupees, ₹200,
+      // Rs 200, 50L, 1 crore, 5000000, etc. A numeric amount alone is valid.
       const hasNumber = /\d/.test(v);
-      const hasUnit = /(lakh|lac|lakhs|l|crore|cr|k|million|mn|thousand|₹|rs\.?|inr|usd|\$)/i.test(v);
-      const hasInvalidCash = /\bcash\b/i.test(v) && !/(₹|rs\.?|inr|\$|usd)/i.test(v);
-      if (!hasNumber || hasInvalidCash || (!hasUnit && !/^[\d,]+(?:\.\d+)?$/.test(v))) {
-        return { ok:false, message:"Please enter your budget clearly, for example ₹50 lakh, 50L, 1 crore, or ₹50,00,000." };
+      const hasCurrencyWord = /\b(rupee|rupees|rs|inr|usd|dollar|dollars)\b/i.test(v);
+      const hasUnit = /(lakh|lac|lakhs|crore|cr|million|mn|thousand|k|₹|\$)/i.test(v);
+      const numericOnly = /^[\d,]+(?:\.\d+)?$/.test(v);
+      if (!hasNumber || (!hasUnit && !hasCurrencyWord && !numericOnly)) {
+        return { ok:false, message:"Please enter your budget clearly, for example ₹50 lakh, 50L, 1 crore, ₹50,00,000, or 200 rupees." };
       }
       return { ok:true, value:v };
     }
@@ -228,6 +251,7 @@
         body:JSON.stringify({
           message:text,
           currentQuestion:q ? q.text : "",
+          currentQuestionId:q ? q.id : "",
           answers:state.answers
         })
       });
@@ -241,8 +265,9 @@
   }
 
   async function handleAppointmentOffer(v) {
-    if (/^(no|n|இல்லை|வேண்டாம்|vena|vendam)$/i.test(v)) return finishConversation();
-    if (/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum)$/i.test(v)) {
+    const answer = String(v || "").trim().toLowerCase().replace(/[.!?]+$/g, "");
+    if (/^(no|n|இல்லை|வேண்டாம்|vena|vendam|venam)$/.test(answer)) return finishConversation();
+    if (/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum|venum)$/.test(answer)) {
       state.phase = "appointment";
       state.appointmentStep = 0;
       return askAppointmentNext();
@@ -295,7 +320,6 @@
       return bookAppointment();
     }
 
-    // Name is the only free-form field before the configured questions.
     if (state.step === 0) {
       if (looksLikeQuestion(val)) {
         const answered = await askAI(val, null);
@@ -312,29 +336,26 @@
     const q = currentQuestion();
     if (!q) return finishLead();
 
-    // A question is NOT an answer. Answer it with AI and keep the user on the same field.
+    // If the visitor clearly asks a question, answer it without consuming the
+    // current lead field. This keeps the qualification flow in control.
     if (looksLikeQuestion(val)) {
       const answered = await askAI(val, q);
       if (!answered) {
         const type = questionType(q);
         if (type === "purpose") addMsg("For personal use, Own Use is usually best. For rental income or future growth, Investment may be better.", "bot");
-        else addMsg("I can help with that. Let me know your answer for the question above, or ask me and I'll explain.", "bot");
+        else if (type === "budget") addMsg("The right budget depends on the scope and what you need. Please enter the budget range you are comfortable with.", "bot");
+        else addMsg("I can help with that. Please give me your answer to the question above, or ask me and I'll explain.", "bot");
       }
       setTimeout(() => addMsg(q.text, "bot"), 200);
       return;
     }
 
-    // Validate the answer before advancing the flow.
+    // Validate first. Do not let question-like words inside a legitimate
+    // answer such as "tomorrow venum" or "I will need it soon" block progress.
     const checked = validateAnswer(q, val);
     if (!checked.ok) {
-      if (checked.question) {
-        const answered = await askAI(val, q);
-        if (!answered) addMsg("Sure, I can explain that. Please also give me your answer to the question above.", "bot");
-        setTimeout(() => addMsg(q.text, "bot"), 200);
-      } else {
-        addMsg(checked.message, "bot");
-        setTimeout(() => addMsg(q.text, "bot"), 200);
-      }
+      addMsg(checked.message, "bot");
+      setTimeout(() => addMsg(q.text, "bot"), 200);
       return;
     }
 
