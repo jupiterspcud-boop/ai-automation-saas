@@ -1,331 +1,36 @@
-/*
- * AI Automation Platform — embeddable chatbot widget.
- * Usage: <script src="https://YOUR_DOMAIN/widget.js" data-business-id="xxxx"></script>
- * Runs entirely client-side; talks only to the public, unauthenticated
- * endpoints (/chatbot-flow, /leads, /appointments, /ai-chat) — safe to embed on any public website.
- */
+/* AI Automation Platform — embeddable chatbot widget */
 (function () {
   const scriptTag = document.currentScript;
-  const businessId = scriptTag.getAttribute("data-business-id");
-  const API_BASE = new URL(scriptTag.src).origin + "/api";
+  const businessId = scriptTag && scriptTag.getAttribute("data-business-id");
+  const API_BASE = scriptTag ? new URL(scriptTag.src, location.href).origin + "/api" : location.origin + "/api";
+  if (!businessId) { console.error("[AI widget] data-business-id is required"); return; }
+  if (window.__AI_WIDGET_LOADED__) return;
+  window.__AI_WIDGET_LOADED__ = true;
 
-  if (!businessId) {
-    console.error("[AI widget] data-business-id is required on the script tag");
-    return;
-  }
-
-  const ORANGE = "#d9622b";
-  const DARK = "#1f1f1f";
-
-  const style = document.createElement("style");
-  style.textContent = `
-    .aiw-bubble { position: fixed; bottom: 22px; right: 22px; width: 58px; height: 58px;
-      border-radius: 50%; background: ${ORANGE}; color: #fff; display: flex; align-items: center;
-      justify-content: center; font-size: 26px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.25);
-      z-index: 999998; border: none; }
-    .aiw-window { position: fixed; bottom: 92px; right: 22px; width: 340px; max-height: 480px;
-      background: #fff; border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.25); display: none;
-      flex-direction: column; overflow: hidden; z-index: 999999; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
-    .aiw-window.open { display: flex; }
-    .aiw-header { background: ${DARK}; color: #fff; padding: 14px 16px; font-weight: 600; font-size: 14px; }
-    .aiw-header small { display:block; font-weight:400; opacity:.7; font-size: 11px; margin-top:2px;}
-    .aiw-body { flex: 1; padding: 14px; overflow-y: auto; background: #faf8f5; font-size: 14px; }
-    .aiw-msg { margin-bottom: 10px; max-width: 85%; padding: 8px 12px; border-radius: 10px; line-height: 1.4; }
-    .aiw-msg.bot { background: #fff; border: 1px solid #e7e2da; color: ${DARK}; border-bottom-left-radius: 2px; }
-    .aiw-msg.user { background: ${ORANGE}; color: #fff; margin-left: auto; border-bottom-right-radius: 2px; }
-    .aiw-input-row { display: flex; border-top: 1px solid #e7e2da; }
-    .aiw-input-row input { flex: 1; border: none; padding: 12px; font-size: 14px; outline: none; }
-    .aiw-input-row button { background: ${ORANGE}; color: #fff; border: none; padding: 0 16px; cursor: pointer; font-weight: 600; }
-    .aiw-done { padding: 14px; text-align:center; font-size: 13px; color: #3a8a5c; }
-  `;
+  const ORANGE="#d9622b", DARK="#161b24";
+  const style=document.createElement("style");
+  style.textContent=`.aiw-bubble{position:fixed!important;bottom:22px!important;right:22px!important;width:60px!important;height:60px!important;border-radius:50%!important;background:${ORANGE}!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:25px!important;cursor:pointer!important;box-shadow:0 10px 28px rgba(0,0,0,.28)!important;z-index:2147483000!important;border:0!important}.aiw-window{position:fixed!important;bottom:94px!important;right:22px!important;width:min(370px,calc(100vw - 28px))!important;height:500px!important;background:#fff!important;border-radius:18px!important;box-shadow:0 20px 60px rgba(0,0,0,.3)!important;display:none!important;flex-direction:column!important;overflow:hidden!important;z-index:2147483001!important;font-family:Arial,sans-serif!important}.aiw-window.open{display:flex!important}.aiw-header{background:${DARK};color:#fff;padding:16px;font-weight:700}.aiw-header small{display:block;font-weight:400;opacity:.72;font-size:12px;margin-top:4px}.aiw-body{flex:1;padding:14px;overflow-y:auto;background:#faf8f5;font-size:14px}.aiw-msg{margin-bottom:10px;max-width:85%;padding:10px 12px;border-radius:12px;line-height:1.45}.aiw-msg.bot{background:#fff;border:1px solid #e7e2da;color:${DARK}}.aiw-msg.user{background:${ORANGE};color:#fff;margin-left:auto}.aiw-input-row{display:flex;border-top:1px solid #e7e2da;background:#fff}.aiw-input-row input{flex:1;min-width:0;border:0;padding:14px;font-size:14px;outline:0}.aiw-input-row button{background:${ORANGE};color:#fff;border:0;padding:0 18px;cursor:pointer;font-weight:700}.aiw-done{padding:12px;text-align:center;font-size:13px;color:#28734d}`;
   document.head.appendChild(style);
 
-  const bubble = document.createElement("button");
-  bubble.className = "aiw-bubble";
-  bubble.innerHTML = "💬";
-  document.body.appendChild(bubble);
-
-  const win = document.createElement("div");
-  win.className = "aiw-window";
-  win.innerHTML = `
-    <div class="aiw-header">Chat with us<small>Usually replies instantly</small></div>
-    <div class="aiw-body" id="aiw-body"></div>
-    <div class="aiw-input-row">
-      <input id="aiw-input" type="text" placeholder="Type your answer…" />
-      <button id="aiw-send">Send</button>
-    </div>
-  `;
-  document.body.appendChild(win);
-
-  bubble.onclick = () => {
-    win.classList.toggle("open");
-    if (win.classList.contains("open") && !state.started) startFlow();
-  };
-
-  const body = win.querySelector("#aiw-body");
-  const input = win.querySelector("#aiw-input");
-  const sendBtn = win.querySelector("#aiw-send");
-
-  const state = {
-    started: false,
-    flow: null,
-    step: 0,
-    answers: {},
-    conversation: [],
-    leadSaved: false,
-    name: "",
-    phase: "lead",
-    appointment: { date: "", time: "", notes: "" },
-    appointmentStep: 0,
-  };
-
-  function addMsg(text, who) {
-    const m = document.createElement("div");
-    m.className = "aiw-msg " + who;
-    m.textContent = text;
-    body.appendChild(m);
-    body.scrollTop = body.scrollHeight;
-    state.conversation.push({ role: who === "bot" ? "assistant" : "user", text: String(text) });
-  }
-
-  async function startFlow() {
-    state.started = true;
-    try {
-      const res = await fetch(`${API_BASE}/businesses/${businessId}/chatbot-flow`);
-      if (!res.ok) throw new Error("flow unavailable");
-      state.flow = await res.json();
-      addMsg(state.flow.greeting, "bot");
-      setTimeout(() => askNext(), 400);
-    } catch (e) {
-      addMsg("Sorry, chat is temporarily unavailable. Please call us directly.", "bot");
-    }
-  }
-
-  function askNext() {
-    if (state.step === 0) {
-      addMsg("First, what's your name?", "bot");
-      return;
-    }
-    const q = state.flow.questions[state.step - 1];
-    if (!q) return finishLead();
-    addMsg(q.text, "bot");
-  }
-
-  async function saveLead() {
-    if (state.leadSaved) return null;
-    if (state.flow.modulesEnabled && state.flow.modulesEnabled.lead_capture === false) return null;
-    try {
-      const res = await fetch(`${API_BASE}/businesses/${businessId}/leads`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: state.name,
-          phone: state.answers.phone || "",
-          answers: state.answers,
-          conversation: state.conversation,
-          source: "website_chat",
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.lead) {
-        state.leadSaved = true;
-        const doneMsg = document.createElement("div");
-        doneMsg.className = "aiw-done";
-        doneMsg.textContent = "✓ Your details have been saved.";
-        body.appendChild(doneMsg);
-      }
-      return data.lead || null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async function finishLead() {
-    const canBook = !!(state.flow.modulesEnabled && state.flow.modulesEnabled.appointment);
-    if (canBook) {
-      state.phase = "appointment_offer";
-      addMsg("Would you like to book an appointment? (Yes / No)", "bot");
-      return;
-    }
-    await finishConversation();
-  }
-
-  async function finishConversation() {
-    if (state.phase === "done" || state.phase === "saving") return;
-    addMsg("Thank you! Our team will reach out to you shortly. 🙌", "bot");
-    state.phase = "saving";
-    await saveLead();
-    state.phase = "done";
-    input.disabled = true;
-    sendBtn.disabled = true;
-    input.placeholder = "Conversation complete";
-  }
-
-  function askAppointmentNext() {
-    if (state.appointmentStep === 0) {
-      addMsg("What date would you prefer? (YYYY-MM-DD)", "bot");
-      return;
-    }
-    if (state.appointmentStep === 1) {
-      addMsg("What time would you prefer?", "bot");
-      return;
-    }
-    if (state.appointmentStep === 2) {
-      addMsg("Any note for the team? (Optional — type No if none)", "bot");
-      return;
-    }
-  }
-
-  async function bookAppointment() {
-    state.phase = "booking";
-    try {
-      const res = await fetch(`${API_BASE}/businesses/${businessId}/appointments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: state.name,
-          phone: state.answers.phone || "",
-          date: state.appointment.date,
-          time: state.appointment.time,
-          notes: state.appointment.notes,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.appointment) throw new Error("booking failed");
-      addMsg(`Appointment booked for ${state.appointment.date} at ${state.appointment.time}. ✅`, "bot");
-    } catch (e) {
-      addMsg("I couldn't complete the appointment booking right now. Our team will contact you shortly.", "bot");
-    }
-    await finishConversation();
-  }
-
-  function looksLikeQuestion(text) {
-    return /[?？]/.test(text) ||
-      /\b(best|better|which|what|why|how|recommend|recommended|option|price|cost|loan|emi)\b/i.test(text) ||
-      /(எது|என்ன|ஏன்|எப்படி|எந்த|சிறந்த|நல்ல|பரிந்துரை|விலை|கடன்|எவ்வளவு)/i.test(text);
-  }
-
-  // Keep the visitor's original text in conversation, but store a clean
-  // canonical location in CRM for common city spellings/typos.
-  function normalizeLocation(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return raw;
-    const key = raw.toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
-    const aliases = {
-      london: "London", londan: "London", londen: "London", londn: "London", landon: "London",
-      chennai: "Chennai", madras: "Chennai",
-      bengaluru: "Bengaluru", bangalore: "Bengaluru", bengalor: "Bengaluru", bengluru: "Bengaluru",
-      mumbai: "Mumbai", bombay: "Mumbai",
-      delhi: "Delhi", dilli: "Delhi",
-      hyderabad: "Hyderabad", hydrabad: "Hyderabad", hyderbad: "Hyderabad",
-      coimbatore: "Coimbatore", coimbator: "Coimbatore",
-      madurai: "Madurai", kochi: "Kochi", trivandrum: "Thiruvananthapuram",
-      dubai: "Dubai", abu dhabi: "Abu Dhabi",
-    };
-    return aliases[key] || raw;
-  }
-
-  function purposeFallback() {
-    return "If you're buying for your own use, Own Use is usually the better fit because you plan to live there. If your goal is rental income or future appreciation, Investment is usually the better fit. Which one matches your goal?";
-  }
-
-  async function askAI(text, q) {
-    try {
-      const res = await fetch(`${API_BASE}/businesses/${businessId}/ai-chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          currentQuestion: q ? q.text : "",
-          answers: state.answers,
-        }),
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      if (!data.answer) return false;
-      addMsg(data.answer, "bot");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  async function handleAppointmentOffer(val) {
-    if (/^(no|n|இல்லை|வேண்டாம்|vena|vendam)$/i.test(val)) {
-      await finishConversation();
-      return;
-    }
-    if (/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum|venam)$/i.test(val)) {
-      state.phase = "appointment";
-      state.appointmentStep = 0;
-      askAppointmentNext();
-      return;
-    }
-    addMsg("Please type Yes or No.", "bot");
-  }
-
-  async function handleAppointment(val) {
-    if (state.appointmentStep === 0) state.appointment.date = val;
-    else if (state.appointmentStep === 1) state.appointment.time = val;
-    else state.appointment.notes = /^(no|none|இல்லை|வேண்டாம்)$/i.test(val) ? "" : val;
-
-    state.appointmentStep += 1;
-    if (state.appointmentStep <= 2) {
-      setTimeout(() => askAppointmentNext(), 250);
-      return;
-    }
-    await bookAppointment();
-  }
-
-  async function handleSend() {
-    const val = input.value.trim();
-    if (!val || state.phase === "done" || state.phase === "saving" || state.phase === "booking") return;
-    addMsg(val, "user");
-    input.value = "";
-
-    if (state.phase === "appointment_offer") {
-      await handleAppointmentOffer(val);
-      return;
-    }
-
-    if (state.phase === "appointment") {
-      await handleAppointment(val);
-      return;
-    }
-
-    if (state.step === 0) {
-      state.name = val;
-      state.step += 1;
-      setTimeout(() => askNext(), 350);
-      return;
-    }
-
-    const q = state.flow.questions[state.step - 1];
-
-    // AI handles genuine questions without consuming the current lead-flow answer.
-    // If AI is unavailable, purpose advice still has a deterministic fallback.
-    if (q && looksLikeQuestion(val)) {
-      const answeredByAI = await askAI(val, q);
-      if (answeredByAI) {
-        setTimeout(() => addMsg(q.text, "bot"), 250);
-        return;
-      }
-      if (q.id === "purpose" && /\b(best|better|which|what|recommend|option)\b/i.test(val) ||
-          (q.id === "purpose" && /(எது|என்ன|எந்த|சிறந்த|நல்ல|பரிந்துரை)/i.test(val))) {
-        addMsg(purposeFallback(), "bot");
-        setTimeout(() => addMsg(q.text, "bot"), 250);
-        return;
-      }
-    }
-
-    if (q) {
-      state.answers[q.id] = q.id === "location" ? normalizeLocation(val) : val;
-    }
-    state.step += 1;
-    setTimeout(() => askNext(), 350);
-  }
-
-  sendBtn.onclick = handleSend;
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") handleSend(); });
+  const bubble=document.createElement("button"); bubble.className="aiw-bubble"; bubble.type="button"; bubble.setAttribute("aria-label","Open chat"); bubble.innerHTML="💬"; document.body.appendChild(bubble);
+  const win=document.createElement("div"); win.className="aiw-window"; win.innerHTML=`<div class="aiw-header">Chat with us<small>Usually replies instantly</small></div><div class="aiw-body"></div><div class="aiw-input-row"><input type="text" placeholder="Type your answer…"/><button type="button">Send</button></div>`; document.body.appendChild(win);
+  const body=win.querySelector(".aiw-body"), input=win.querySelector("input"), sendBtn=win.querySelector("button");
+  const state={started:false,flow:null,step:0,answers:{},conversation:[],leadSaved:false,name:"",phase:"lead",appointment:{date:"",time:"",notes:""},appointmentStep:0};
+  function addMsg(text,who){const m=document.createElement("div");m.className="aiw-msg "+who;m.textContent=text;body.appendChild(m);body.scrollTop=body.scrollHeight;state.conversation.push({role:who==="bot"?"assistant":"user",text:String(text)});}
+  function open(){win.classList.add("open");if(!state.started)startFlow();setTimeout(()=>input.focus(),50);} function close(){win.classList.remove("open");}
+  bubble.onclick=()=>win.classList.contains("open")?close():open();
+  window.AIWidgetOpen=open; window.AIWidgetClose=close; window.dispatchEvent(new Event("aiwidgetready"));
+  async function startFlow(){state.started=true;try{const r=await fetch(`${API_BASE}/businesses/${encodeURIComponent(businessId)}/chatbot-flow`);if(!r.ok)throw Error();state.flow=await r.json();addMsg(state.flow.greeting||"Hi! How can I help you?","bot");setTimeout(askNext,250);}catch(e){addMsg("Sorry, chat is temporarily unavailable. Please try again shortly.","bot");}}
+  function askNext(){if(state.step===0){addMsg("First, what's your name?","bot");return;}const q=state.flow&&state.flow.questions&&state.flow.questions[state.step-1];if(!q)return finishLead();addMsg(q.text,"bot");}
+  async function saveLead(){if(state.leadSaved||!state.flow)return;try{const r=await fetch(`${API_BASE}/businesses/${encodeURIComponent(businessId)}/leads`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:state.name,phone:state.answers.phone||"",answers:state.answers,conversation:state.conversation,source:"website_chat"})});const d=await r.json();if(d.lead){state.leadSaved=true;const x=document.createElement("div");x.className="aiw-done";x.textContent="✓ Your details have been saved.";body.appendChild(x);}}catch(e){}}
+  async function finishLead(){const canBook=!!(state.flow&&state.flow.modulesEnabled&&state.flow.modulesEnabled.appointment);if(canBook){state.phase="appointment_offer";addMsg("Would you like to book an appointment? (Yes / No)","bot");}else await finishConversation();}
+  async function finishConversation(){if(state.phase==="done"||state.phase==="saving")return;addMsg("Thank you! Our team will reach out to you shortly. 🙌","bot");state.phase="saving";await saveLead();state.phase="done";input.disabled=true;sendBtn.disabled=true;input.placeholder="Conversation complete";}
+  function looksLikeQuestion(t){return /[?？]/.test(t)||/\b(best|better|which|what|why|how|recommend|price|cost)\b/i.test(t)||/(எது|என்ன|ஏன்|எப்படி|எந்த|சிறந்த|நல்ல|பரிந்துரை|விலை)/i.test(t);}
+  function normalizeLocation(v){const raw=String(v||"").trim(),key=raw.toLowerCase().replace(/[.,]/g,"").replace(/\s+/g," ");const a={london:"London",londan:"London",londen:"London",londn:"London",landon:"London",chennai:"Chennai",madras:"Chennai",bangalore:"Bengaluru",bengaluru:"Bengaluru",bengalor:"Bengaluru",mumbai:"Mumbai",bombay:"Mumbai",delhi:"Delhi",dilli:"Delhi",hyderabad:"Hyderabad",hydrabad:"Hyderabad",dubai:"Dubai"};return a[key]||raw;}
+  async function askAI(text,q){try{const r=await fetch(`${API_BASE}/businesses/${encodeURIComponent(businessId)}/ai-chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,currentQuestion:q?q.text:"",answers:state.answers})});const d=await r.json();if(r.ok&&d.answer){addMsg(d.answer,"bot");return true;}}catch(e){}return false;}
+  async function handleAppointmentOffer(v){if(/^(no|n|இல்லை|வேண்டாம்|vena|vendam)$/i.test(v))return finishConversation();if(/^(yes|y|ஆம்|ஆமாம்|வேண்டும்|venum)$/i.test(v)){state.phase="appointment";state.appointmentStep=0;return askAppointmentNext();}addMsg("Please type Yes or No.","bot");}
+  function askAppointmentNext(){if(state.appointmentStep===0)addMsg("What date would you prefer? (YYYY-MM-DD)","bot");else if(state.appointmentStep===1)addMsg("What time would you prefer?","bot");else addMsg("Any note for the team? (Optional — type No if none)","bot");}
+  async function bookAppointment(){try{await fetch(`${API_BASE}/businesses/${encodeURIComponent(businessId)}/appointments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:state.name,phone:state.answers.phone||"",date:state.appointment.date,time:state.appointment.time,notes:state.appointment.notes})});addMsg(`Appointment request saved for ${state.appointment.date} at ${state.appointment.time}. ✅`,"bot");}catch(e){addMsg("We couldn't complete the booking right now, but our team will contact you.","bot");}await finishConversation();}
+  async function handleSend(){const val=input.value.trim();if(!val||["done","saving","booking"].includes(state.phase))return;addMsg(val,"user");input.value="";if(state.phase==="appointment_offer")return handleAppointmentOffer(val);if(state.phase==="appointment"){if(state.appointmentStep===0)state.appointment.date=val;else if(state.appointmentStep===1)state.appointment.time=val;else state.appointment.notes=/^(no|none|இல்லை|வேண்டாம்)$/i.test(val)?"":val;state.appointmentStep++;if(state.appointmentStep<=2){setTimeout(askAppointmentNext,200);return;}return bookAppointment();}if(state.step===0){state.name=val;state.step++;setTimeout(askNext,250);return;}const q=state.flow&&state.flow.questions&&state.flow.questions[state.step-1];if(q&&looksLikeQuestion(val)){if(await askAI(val,q)){setTimeout(()=>addMsg(q.text,"bot"),200);return;}if(q.id==="purpose"){addMsg("For personal use, Own Use is usually best. For rental income or future growth, Investment may be better. Which one matches your goal?","bot");setTimeout(()=>addMsg(q.text,"bot"),200);return;}}if(q)state.answers[q.id]=q.id==="location"?normalizeLocation(val):val;state.step++;setTimeout(askNext,250);}
+  sendBtn.onclick=handleSend;input.addEventListener("keydown",e=>{if(e.key==="Enter")handleSend();});
 })();
