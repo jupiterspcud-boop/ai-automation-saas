@@ -7,12 +7,13 @@
 <link rel="stylesheet" href="style.css" />
 <style>
   .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
-  .automation { margin-bottom:14px; }
-  .automation-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
+  .automation,.task { margin-bottom:14px; }
+  .automation-head,.task-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
   .pill { display:inline-block; background:#f2ede6; border-radius:999px; padding:4px 9px; font-size:12px; margin:3px 4px 3px 0; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  @media(max-width:700px){.row{grid-template-columns:1fr}.automation-head{display:block}}
-  .json-note { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; background:#f7f4ef; padding:10px; border-radius:8px; white-space:pre-wrap; }
+  .task.open { border-left:4px solid #e36b2c; }
+  .task.done { opacity:.7; }
+  @media(max-width:700px){.row{grid-template-columns:1fr}.automation-head,.task-head{display:block}}
 </style>
 </head>
 <body>
@@ -20,6 +21,7 @@
 <div class="wrap">
   <div class="flex between" style="align-items:flex-start"><div><h1>Automation Engine</h1><p class="sub">Create reusable trigger → condition → action workflows for this business.</p></div><button class="btn" onclick="showCreate()">+ New Automation</button></div>
   <div id="message"></div>
+
   <div id="create" class="card" style="display:none; margin:18px 0">
     <h2 style="margin-top:0">New automation</h2>
     <div class="row">
@@ -38,12 +40,25 @@
       <div class="field"><label>Action</label><select id="action"></select></div>
       <div class="field"><label>Action value</label><input id="actionValue" type="text" placeholder="Task title, tag, or status" /></div>
     </div>
-    <div class="hint">v1 deliberately executes only internal CRM actions. WhatsApp, email, SMS, voice and webhook delivery will be connected as real provider integrations later.</div>
+    <div class="field"><label>Task due date/time (optional)</label><input id="actionDueAt" type="datetime-local" /></div>
+    <div class="hint">v1 executes internal CRM actions. External WhatsApp, email, SMS, voice and webhook delivery will be connected through provider integrations later.</div>
     <div class="toolbar" style="margin-top:16px"><button class="btn" onclick="createAutomation()">Create automation</button><button class="btn secondary" onclick="hideCreate()">Cancel</button></div>
   </div>
 
   <h2>Active automations</h2>
   <div id="list"></div>
+
+  <div class="flex between" style="align-items:center"><h2>Follow-up tasks</h2><button class="btn small" onclick="showTaskCreate()">+ Add task</button></div>
+  <div id="taskCreate" class="card" style="display:none;margin:18px 0">
+    <div class="row">
+      <div class="field"><label>Task title</label><input id="taskTitle" placeholder="Call qualified lead" /></div>
+      <div class="field"><label>Due date/time</label><input id="taskDueAt" type="datetime-local" /></div>
+    </div>
+    <div class="field"><label>Lead ID (optional)</label><input id="taskLeadId" placeholder="Lead ID" /></div>
+    <div class="toolbar"><button class="btn" onclick="createTask()">Create task</button><button class="btn secondary" onclick="hideTaskCreate()">Cancel</button></div>
+  </div>
+  <div id="tasks"></div>
+
   <h2>Recent execution log</h2>
   <div id="logs"></div>
 </div>
@@ -58,7 +73,10 @@ function esc(v){return String(v??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&l
 function showMessage(text,error=false){document.getElementById("message").innerHTML=`<div class="card" style="margin:16px 0;border-color:${error?"#b3261e":"var(--ok)"}">${esc(text)}</div>`;}
 function showCreate(){document.getElementById("create").style.display="block";}
 function hideCreate(){document.getElementById("create").style.display="none";}
+function showTaskCreate(){document.getElementById("taskCreate").style.display="block";}
+function hideTaskCreate(){document.getElementById("taskCreate").style.display="none";}
 function fill(id,obj){document.getElementById(id).innerHTML=Object.entries(obj).map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("");}
+function toIsoFromLocal(value){return value?new Date(value).toISOString():null;}
 async function boot(){
   if(!businessId||!token){showMessage("Open this page from an authenticated Admin/Client dashboard with a business selected.",true);return;}
   const [metaRes,bizRes]=await Promise.all([fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automation-meta`,{headers:headers()}),fetch(`${API}/businesses/${encodeURIComponent(businessId)}`,{headers:headers()})]);
@@ -70,9 +88,14 @@ async function boot(){
   await load();
 }
 async function load(){
-  const [aRes,lRes]=await Promise.all([fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automations`,{headers:headers()}),fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automation-logs`,{headers:headers()})]);
-  const automations=await aRes.json(); const logs=await lRes.json();
+  const [aRes,lRes,tRes]=await Promise.all([
+    fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automations`,{headers:headers()}),
+    fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automation-logs`,{headers:headers()}),
+    fetch(`${API}/businesses/${encodeURIComponent(businessId)}/tasks`,{headers:headers()})
+  ]);
+  const automations=await aRes.json(); const logs=await lRes.json(); const tasks=await tRes.json();
   document.getElementById("list").innerHTML=automations.length?automations.map(renderAutomation).join(""):"<div class='card muted'>No automations yet. Create the first trigger → condition → action workflow.</div>";
+  document.getElementById("tasks").innerHTML=tasks.length?tasks.map(renderTask).join(""):"<div class='card muted'>No follow-up tasks yet.</div>";
   document.getElementById("logs").innerHTML=logs.length?`<table><tr><th>When</th><th>Automation</th><th>Trigger</th><th>Action</th><th>Lead</th></tr>${logs.map(l=>`<tr><td>${esc(new Date(l.createdAt).toLocaleString())}</td><td>${esc(l.automationId)}</td><td>${esc(l.eventType)}</td><td>${esc(l.actionType)}</td><td>${esc(l.leadId)}</td></tr>`).join("")}</table>`:"<div class='card muted'>No automation executions yet.</div>";
 }
 function renderAutomation(a){
@@ -80,20 +103,34 @@ function renderAutomation(a){
   const actions=(a.actions||[]).map(x=>`<span class="pill">THEN ${esc(x.type)} ${esc(x.config?.status||x.config?.tag||x.config?.title||"")}</span>`).join("");
   return `<div class="card automation"><div class="automation-head"><div><strong>${esc(a.name)}</strong><div class="hint">${esc(a.description||"No description")}</div><div style="margin-top:8px"><span class="pill">WHEN ${esc(a.trigger)}</span>${conditions}${actions}</div></div><div class="toolbar"><button class="btn small" onclick="testAutomation('${esc(a.id)}')">Test</button><button class="btn secondary small" onclick="toggleAutomation('${esc(a.id)}',${!a.enabled})">${a.enabled?"Disable":"Enable"}</button><button class="btn secondary small" onclick="deleteAutomation('${esc(a.id)}')">Delete</button></div></div><div class="hint">Runs: ${Number(a.runCount||0)} · Last run: ${a.lastRunAt?esc(new Date(a.lastRunAt).toLocaleString()):"Never"}</div></div>`;
 }
+function renderTask(t){
+  const due=t.dueAt?new Date(t.dueAt):null;
+  const overdue=due&&due.getTime()<Date.now()&&t.status!=="done"&&t.status!=="cancelled";
+  return `<div class="card task ${esc(t.status)}"><div class="task-head"><div><strong>${esc(t.title)}</strong><div class="hint">Status: ${esc(t.status)} · ${t.leadId?`Lead: ${esc(t.leadId)} · `:""}Source: ${esc(t.source||"manual")}</div><div class="hint">${due?`Due: ${esc(due.toLocaleString())}${overdue?" · OVERDUE":""}`:"No due date"}</div></div><div class="toolbar">${t.status!=="done"?`<button class="btn small" onclick="setTaskStatus('${esc(t.id)}','done')">Done</button>`:""}${t.status==="open"?`<button class="btn secondary small" onclick="setTaskStatus('${esc(t.id)}','in_progress')">Start</button>`:""}<button class="btn secondary small" onclick="deleteTask('${esc(t.id)}')">Delete</button></div></div></div>`;
+}
 async function createAutomation(){
   const name=document.getElementById("name").value.trim(); const trigger=document.getElementById("trigger").value; const description=document.getElementById("description").value.trim();
   const field=document.getElementById("conditionField").value.trim(); const value=document.getElementById("conditionValue").value.trim(); const operator=document.getElementById("operator").value;
-  const action=document.getElementById("action").value; const actionValue=document.getElementById("actionValue").value.trim();
+  const action=document.getElementById("action").value; const actionValue=document.getElementById("actionValue").value.trim(); const dueAt=toIsoFromLocal(document.getElementById("actionDueAt").value);
   if(!name)return showMessage("Automation name is required.",true);
   const conditions=field?[{field,operator,value}]:[];
   let config={};
   if(action==="update_lead_status")config.status=actionValue||"contacted";
   if(action==="add_tag")config.tag=actionValue||"automation";
-  if(action==="create_task")config.title=actionValue||"Follow up with lead";
+  if(action==="create_task"){config.title=actionValue||"Follow up with lead";if(dueAt)config.dueAt=dueAt;}
   const res=await fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automations`,{method:"POST",headers:headers(),body:JSON.stringify({name,description,trigger,conditions,actions:[{type:action,config}]})});
   const data=await res.json(); if(!res.ok)return showMessage(data.error||"Unable to create automation",true);
-  hideCreate();document.getElementById("name").value="";document.getElementById("description").value="";document.getElementById("conditionField").value="";document.getElementById("conditionValue").value="";document.getElementById("actionValue").value="";showMessage("Automation created.");await load();
+  hideCreate();document.getElementById("name").value="";document.getElementById("description").value="";document.getElementById("conditionField").value="";document.getElementById("conditionValue").value="";document.getElementById("actionValue").value="";document.getElementById("actionDueAt").value="";showMessage("Automation created.");await load();
 }
+async function createTask(){
+  const title=document.getElementById("taskTitle").value.trim(); const dueAt=toIsoFromLocal(document.getElementById("taskDueAt").value); const leadId=document.getElementById("taskLeadId").value.trim()||null;
+  if(!title)return showMessage("Task title is required.",true);
+  const res=await fetch(`${API}/businesses/${encodeURIComponent(businessId)}/tasks`,{method:"POST",headers:headers(),body:JSON.stringify({title,dueAt,leadId})});
+  const data=await res.json();if(!res.ok)return showMessage(data.error||"Unable to create task",true);
+  hideTaskCreate();document.getElementById("taskTitle").value="";document.getElementById("taskDueAt").value="";document.getElementById("taskLeadId").value="";showMessage("Follow-up task created.");await load();
+}
+async function setTaskStatus(id,status){const res=await fetch(`${API}/tasks/${encodeURIComponent(id)}`,{method:"PATCH",headers:headers(),body:JSON.stringify({status})});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to update task",true);}await load();}
+async function deleteTask(id){if(!confirm("Delete this task?"))return;const res=await fetch(`${API}/tasks/${encodeURIComponent(id)}`,{method:"DELETE",headers:headers()});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to delete task",true);}await load();}
 async function toggleAutomation(id,enabled){const res=await fetch(`${API}/automations/${encodeURIComponent(id)}`,{method:"PATCH",headers:headers(),body:JSON.stringify({enabled})});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to update automation",true);}await load();}
 async function deleteAutomation(id){if(!confirm("Delete this automation?"))return;const res=await fetch(`${API}/automations/${encodeURIComponent(id)}`,{method:"DELETE",headers:headers()});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to delete automation",true);}await load();}
 async function testAutomation(id){const leadId=prompt("Enter a lead ID to test this automation against:");if(!leadId)return;const res=await fetch(`${API}/automations/${encodeURIComponent(id)}/test`,{method:"POST",headers:headers(),body:JSON.stringify({leadId})});const d=await res.json();if(!res.ok)return showMessage(d.error||"Test failed",true);showMessage(`Test complete: ${d.matched||0} automation(s) matched, ${d.executed||0} action(s) executed.`);await load();}
