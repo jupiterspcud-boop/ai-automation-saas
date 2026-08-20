@@ -9,6 +9,17 @@ function normalizeTamilDigits(text) {
   return String(text || "").normalize("NFC").replace(/[௦-௯]/g, ch => map[ch]).replace(/\s+/g, " ").trim();
 }
 
+function knowledgeContext(biz) {
+  const items = Array.isArray(biz.knowledge) ? biz.knowledge : [];
+  if (!items.length) return "No client-specific knowledge has been added yet. Do not invent business facts, prices, availability, guarantees, or contact details.";
+  return items.slice(0, 40).map((item, index) => {
+    const title = String(item.title || `Knowledge ${index + 1}`).slice(0, 200);
+    const content = String(item.content || "").slice(0, 12000);
+    const tags = Array.isArray(item.tags) && item.tags.length ? ` Tags: ${item.tags.join(", ")}.` : "";
+    return `KNOWLEDGE ${index + 1} — ${title}.${tags}\n${content}`;
+  }).join("\n\n");
+}
+
 router.post("/businesses/:businessId/ai-chat", async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(503).json({ enabled: false, error: "AI is not configured" });
@@ -24,18 +35,12 @@ router.post("/businesses/:businessId/ai-chat", async (req, res) => {
   const question = normalizeTamilDigits(req.body?.currentQuestion || "");
   const questionId = String(req.body?.currentQuestionId || "").trim();
   const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+  const clientKnowledge = knowledgeContext(biz);
 
-  const siteContext = biz.id === "voxbridge"
-    ? [
-        "VoxBridge provides AI-powered video dubbing and live streaming solutions.",
-        "Its website describes creating multilingual versions of videos while preserving a natural viewing experience.",
-        "It also describes real-time live streaming and helping content reach audiences across languages.",
-        "The supplied website facts do not include public pricing, delivery guarantees, availability schedules, phone numbers, or other unverified commercial promises."
-      ].join(" ")
-    : `No additional business-specific facts are available beyond the business name (${biz.name}), niche (${flow.label}), and the configured lead questions.`;
+  const system = `You are the customer-facing website chatbot for ${biz.name}. Your niche is ${flow.label}.
 
-  const system = `You are the customer-facing website chatbot for ${biz.name}.
-${siteContext}
+CLIENT KNOWLEDGE BASE — use these client facts as your primary source of truth:
+${clientKnowledge}
 
 The visitor is currently completing a lead form. Current lead question: ${question || "none"} (id: ${questionId || "none"}). Answers collected so far: ${JSON.stringify(answers)}.
 
@@ -44,26 +49,20 @@ IMPORTANT LANGUAGE RULES:
 - Treat Tamil script and Tanglish as normal language, not as gibberish.
 - Understand the meaning before answering. Do not repeat or translate the visitor's words unless useful.
 - Reply in the same language style as the visitor whenever practical. If they use Tamil/Tanglish, answer in simple Tamil/Tanglish.
-- Do not confuse a lead answer with a question merely because it contains words such as 'வேண்டும்', 'வேணும்', 'வேணாம்', 'பண்ணுவேன்', 'பண்ணுங்க', 'venum', 'venam', 'pannu', 'pannunga', 'tomorrow', or 'today'.
+
+KNOWLEDGE RULES:
+- Answer business-specific questions from the CLIENT KNOWLEDGE BASE above.
+- Do not mix information from another business or another tenant.
+- If the answer is not present in the knowledge base, clearly say that the available business information does not confirm it and offer to collect the visitor's requirement for follow-up.
+- Never invent prices, discounts, packages, guarantees, turnaround times, phone numbers, appointments, or availability.
+- You may use general knowledge only to explain general concepts, but never present it as a specific fact about ${biz.name}.
 
 QUESTION ANSWERING:
 - Answer the visitor's actual question only when the message is clearly a question or request for information.
 - After answering, do not take the question as the lead-field answer. The website widget will ask the current lead question again.
 - Keep answers short, direct, and useful.
-- If the visitor asks what VoxBridge does, explain AI video dubbing and live streaming from the supplied context.
-- If they ask how AI video dubbing works, give a brief general explanation: source video/audio is processed, speech is translated/dubbed into the target language, and the resulting version is prepared for the intended audience. Do not claim unsupported technical features.
-- If they ask about live streaming, explain that VoxBridge focuses on real-time streaming for audiences across languages, without inventing platforms, capacity, or latency numbers.
-- If they ask for price/cost, say pricing depends on scope, languages, video duration, and requirements; never invent a price.
-- If they ask for an exact service, feature, guarantee, turnaround time, phone number, or availability that is not in the supplied context, say that the website information provided to you does not confirm it and invite them to share their requirement for follow-up.
-- Never invent discounts, packages, customer names, phone numbers, appointments, or guarantees.
 - If the visitor's message is clearly an answer to the current lead question rather than a question, do not answer it as an FAQ.
-
-Examples of questions that should be understood correctly:
-- Tamil: "VoxBridge என்ன செய்கிறது?", "AI dubbing எப்படி வேலை செய்கிறது?", "Live streaming என்ன?", "எவ்வளவு செலவு ஆகும்?"
-- Tanglish: "VoxBridge enna service?", "AI dubbing epdi work aagum?", "live streaming na enna?", "evlo cost aagum?"
-- Mixed: "Tamil video-ai English-la dub panna mudiyuma?"
-
-For a non-question lead answer, give at most a brief acknowledgement if needed. Do not derail the lead flow.`;
+- For a non-question lead answer, give at most a brief acknowledgement if needed. Do not derail the lead flow.`;
 
   try {
     if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
@@ -75,7 +74,7 @@ For a non-question lead answer, give at most a brief acknowledgement if needed. 
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: message }] }],
-          generationConfig: { maxOutputTokens: 180, temperature: 0.1 },
+          generationConfig: { maxOutputTokens: 220, temperature: 0.1 },
         }),
       });
       const data = await response.json();
@@ -91,7 +90,7 @@ For a non-question lead answer, give at most a brief acknowledgement if needed. 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || "gpt-4.1-mini", instructions: system, input: message, max_output_tokens: 180 }),
+      body: JSON.stringify({ model: process.env.OPENAI_MODEL || "gpt-4.1-mini", instructions: system, input: message, max_output_tokens: 220 }),
     });
     const data = await response.json();
     if (!response.ok) {
