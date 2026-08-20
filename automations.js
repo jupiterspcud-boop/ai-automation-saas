@@ -21,6 +21,7 @@ const ACTIONS = {
 };
 
 const VALID_STATUSES = ["new", "contacted", "qualified", "won", "lost"];
+const VALID_TASK_STATUSES = ["open", "in_progress", "done", "cancelled"];
 const VALID_OPERATORS = ["equals", "not_equals", "contains", "gte", "lte"];
 
 function ensureCollections(data) {
@@ -74,6 +75,9 @@ function normalizeAutomation(body = {}) {
     if (a.type === "create_task" && !String(a.config.title || "").trim()) {
       throw new Error("Task title is required for create_task action");
     }
+    if (a.type === "create_task" && a.config.dueAt && Number.isNaN(Date.parse(a.config.dueAt))) {
+      throw new Error("Invalid task dueAt");
+    }
   }
 
   return { name, description, trigger, enabled, conditions: safeConditions, actions: safeActions };
@@ -125,7 +129,8 @@ function applyAction(data, automation, action, lead, eventType) {
       dueAt: action.config.dueAt || null,
       status: "open",
       source: `automation:${automation.id}`,
-      createdAt: now
+      createdAt: now,
+      updatedAt: now
     });
   } else if (action.type === "human_handoff") {
     lead.humanHandoff = true;
@@ -188,6 +193,75 @@ router.get("/businesses/:businessId/automation-logs", requireAuth(), (req, res) 
   const data = read();
   const logs = Array.isArray(data.automationLogs) ? data.automationLogs : [];
   res.json(logs.filter(l => l.businessId === businessId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 100));
+});
+
+router.get("/businesses/:businessId/tasks", requireAuth(), (req, res) => {
+  const { businessId } = req.params;
+  if (!checkAccess(req, businessId, res)) return;
+  const data = read();
+  const tasks = (data.tasks || []).filter(t => t.businessId === businessId);
+  tasks.sort((a, b) => {
+    const aTime = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const bTime = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    return aTime - bTime || new Date(b.createdAt) - new Date(a.createdAt);
+  });
+  res.json(tasks);
+});
+
+router.post("/businesses/:businessId/tasks", requireAuth(), async (req, res) => {
+  const { businessId } = req.params;
+  if (!checkAccess(req, businessId, res)) return;
+  const title = String(req.body?.title || "").trim();
+  if (!title) return res.status(400).json({ error: "Task title is required" });
+  const dueAt = req.body?.dueAt || null;
+  if (dueAt && Number.isNaN(Date.parse(dueAt))) return res.status(400).json({ error: "Invalid dueAt" });
+  const leadId = req.body?.leadId ? String(req.body.leadId) : null;
+  const task = {
+    id: nanoid(10), businessId, leadId, title, dueAt, status: "open",
+    source: "manual", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  };
+  await transact(data => { ensureCollections(data); data.tasks.push(task); });
+  res.status(201).json({ task });
+});
+
+router.patch("/tasks/:taskId", requireAuth(), async (req, res) => {
+  const current = (read().tasks || []).find(t => t.id === req.params.taskId);
+  if (!current) return res.status(404).json({ error: "Task not found" });
+  if (!checkAccess(req, current.businessId, res)) return;
+  const requestedStatus = req.body?.status;
+  const dueAt = req.body?.dueAt;
+  if (requestedStatus !== undefined && !VALID_TASK_STATUSES.includes(requestedStatus)) {
+    return res.status(400).json({ error: "Invalid task status" });
+  }
+  if (dueAt !== undefined && dueAt !== null && Number.isNaN(Date.parse(dueAt))) {
+    return res.status(400).json({ error: "Invalid dueAt" });
+  }
+  const updated = await transact(data => {
+    ensureCollections(data);
+    const task = data.tasks.find(t => t.id === req.params.taskId);
+    if (!task) return null;
+    if (requestedStatus !== undefined) task.status = requestedStatus;
+    if (dueAt !== undefined) task.dueAt = dueAt;
+    if (req.body?.title !== undefined) {
+      const title = String(req.body.title).trim();
+      if (!title) throw new Error("Task title is required");
+      task.title = title;
+    }
+    task.updatedAt = new Date().toISOString();
+    return task;
+  });
+  res.json({ task: updated });
+});
+
+router.delete("/tasks/:taskId", requireAuth(), async (req, res) => {
+  const current = (read().tasks || []).find(t => t.id === req.params.taskId);
+  if (!current) return res.status(404).json({ error: "Task not found" });
+  if (!checkAccess(req, current.businessId, res)) return;
+  await transact(data => {
+    ensureCollections(data);
+    data.tasks = data.tasks.filter(t => t.id !== req.params.taskId);
+  });
+  res.json({ ok: true });
 });
 
 router.post("/businesses/:businessId/automations", requireAuth(), async (req, res) => {
