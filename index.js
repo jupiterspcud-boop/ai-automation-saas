@@ -9,6 +9,7 @@ const leadRoutes = require("./leads");
 const appointmentRoutes = require("./appointments");
 const chatbotRoutes = require("./chatbot");
 const aiRoutes = require("./ai");
+const automationRoutes = require("./automations").router;
 
 const app = express();
 app.use(cors());
@@ -20,6 +21,7 @@ app.use("/api", leadRoutes);
 app.use("/api", appointmentRoutes);
 app.use("/api", chatbotRoutes);
 app.use("/api", aiRoutes);
+app.use("/api", automationRoutes);
 
 app.get("/api/health", (req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
