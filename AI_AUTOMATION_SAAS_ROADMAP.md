@@ -108,8 +108,12 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - v1 automation engine API
 - v1 automation builder page
 - Lead-created and lead-status-changed automation triggers
+- Appointment-created automation trigger for linked leads
 - Automation execution logs
 - Internal follow-up task creation action
+- Follow-up task CRUD and task management UI
+- Automated Node test coverage for core automation execution
+- Database transaction queue recovery after failed operations
 
 ### Still MVP/mock
 
@@ -120,6 +124,8 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - JSON file storage is not production-grade
 - Authentication still needs production hardening
 - Automation actions currently stop at internal CRM operations; external delivery providers are not connected
+- Scheduled/delayed automation execution is not implemented yet
+- Retry/error state and durable execution jobs are not implemented yet
 
 ## Implementation order
 
@@ -132,9 +138,9 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - [x] v1 automation engine data/API
 - [x] v1 automation builder UI
 - [x] Lead lifecycle events connected to automation engine
-- [ ] Automation execution tests
-- [ ] Task/follow-up management UI
-- [ ] Appointment-created automation trigger
+- [x] Automation execution tests
+- [x] Task/follow-up management UI
+- [x] Appointment-created automation trigger
 - [ ] Scheduled/delayed automation execution
 - [ ] Automation retry/error state
 
@@ -170,4 +176,4 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 
 ## Immediate next step
 
-Finish the automation layer properly: add automated execution tests, task/follow-up management, appointment-created triggers, scheduled/delayed actions and failure/retry tracking. After that, build the tenant-specific AI knowledge/agent layer. Provider integrations come only after the internal automation model is stable.
+Finish the remaining automation reliability layer: scheduled/delayed execution plus durable failure/retry tracking. After that, build the tenant-specific AI knowledge/agent layer. Provider integrations come only after the internal automation model is stable.
