@@ -24,17 +24,12 @@
   </div>
 
   <script>
-    // Supports /demo?business=BUSINESS_ID. Never use a display name as the ID.
     const params = new URLSearchParams(location.search);
     const requestedBusiness = (params.get('business') || '').trim();
     const businessId = requestedBusiness || 'green-acres-realty';
-
-    // If an old/shared link contains the placeholder value "Business",
-    // fall back to the working demo instead of requesting a non-existent tenant.
     const resolvedBusinessId = /^business$/i.test(businessId) ? 'green-acres-realty' : businessId;
-
     const widget = document.createElement('script');
-    widget.src = '/widget.js';
+    widget.src = '/voice-widget.js?v=1';
     widget.dataset.businessId = resolvedBusinessId;
     document.body.appendChild(widget);
   </script>
