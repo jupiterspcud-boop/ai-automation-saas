@@ -105,6 +105,11 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - Admin/client dashboards
 - Embeddable website chatbot
 - AI/Tamil/Tanglish handling work in progress
+- v1 automation engine API
+- v1 automation builder page
+- Lead-created and lead-status-changed automation triggers
+- Automation execution logs
+- Internal follow-up task creation action
 
 ### Still MVP/mock
 
@@ -114,7 +119,7 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - Email/SMS follow-up is not connected to providers
 - JSON file storage is not production-grade
 - Authentication still needs production hardening
-- Automation engine had been missing as a real reusable platform layer
+- Automation actions currently stop at internal CRM operations; external delivery providers are not connected
 
 ## Implementation order
 
@@ -125,9 +130,13 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - [x] CRM/leads/appointments
 - [x] Embeddable chatbot
 - [x] v1 automation engine data/API
-- [ ] Automation builder UI
+- [x] v1 automation builder UI
+- [x] Lead lifecycle events connected to automation engine
 - [ ] Automation execution tests
 - [ ] Task/follow-up management UI
+- [ ] Appointment-created automation trigger
+- [ ] Scheduled/delayed automation execution
+- [ ] Automation retry/error state
 
 ### Phase 2 — AI agent platform
 
@@ -161,4 +170,4 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 
 ## Immediate next step
 
-Build and verify the **Automation Builder UI** on top of `automations.js`, then connect lead-created and lead-status-changed events to the engine. Only after that should provider integrations be added.
+Finish the automation layer properly: add automated execution tests, task/follow-up management, appointment-created triggers, scheduled/delayed actions and failure/retry tracking. After that, build the tenant-specific AI knowledge/agent layer. Provider integrations come only after the internal automation model is stable.
