@@ -6,6 +6,7 @@ const { transact, read } = require("./db");
 
 const authRoutes = require("./auth");
 const businessRoutes = require("./businesses");
+const knowledgeRoutes = require("./knowledge");
 const leadRoutes = require("./leads");
 const appointmentRoutes = require("./appointments");
 const chatbotRoutes = require("./chatbot");
@@ -14,10 +15,11 @@ const automationRoutes = require("./automations").router;
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/businesses", businessRoutes);
+app.use("/api", knowledgeRoutes);
 app.use("/api", leadRoutes);
 app.use("/api", appointmentRoutes);
 app.use("/api", chatbotRoutes);
