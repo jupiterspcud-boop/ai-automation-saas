@@ -14,33 +14,36 @@ router.post("/admin/login", (req, res) => {
 });
 
 router.post("/client/setup", async (req, res) => {
-  const { businessId, passcode, password } = req.body || {};
-  if (!businessId || !passcode || !password) return res.status(400).json({ error: "Business ID, setup passcode and new password are required" });
+  const { businessId, username, passcode, password } = req.body || {};
+  const loginName = String(username || businessId || "").trim();
+  if (!loginName || !passcode || !password) return res.status(400).json({ error: "Username, setup passcode and new password are required" });
   if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
   const result = await transact((data) => {
-    const biz = data.businesses.find((b) => b.id === businessId);
+    const biz = data.businesses.find((b) => b.id === businessId || b.username === loginName);
     if (!biz) return { error: "Business not found" };
     if (biz.passwordHash) return { error: "Password is already set. Please log in." };
     if (!bcrypt.compareSync(passcode, biz.passcodeHash)) return { error: "Wrong setup passcode" };
+    biz.username = biz.username || loginName;
     biz.passwordHash = bcrypt.hashSync(password, 10);
     biz.passwordSetAt = new Date().toISOString();
     return { ok: true, biz };
   });
   if (result.error) return res.status(400).json({ error: result.error });
-  res.json({ token: sign({ role: "client", businessId: result.biz.id }), role: "client", business: publicBiz(result.biz) });
+  res.json({ token: sign({ role: "client", businessId: result.biz.id, username: result.biz.username }), role: "client", business: publicBiz(result.biz) });
 });
 
 router.post("/client/login", async (req, res) => {
-  const { businessId, password } = req.body || {};
+  const { username, businessId, password } = req.body || {};
+  const loginName = String(username || businessId || "").trim();
   const result = await transact((data) => {
-    const biz = data.businesses.find((b) => b.id === businessId);
+    const biz = data.businesses.find((b) => b.username === loginName || b.id === loginName);
     if (!biz) return { error: "Business not found" };
     if (!biz.passwordHash) return { error: "Set your password first using your setup passcode" };
     if (!bcrypt.compareSync(password || "", biz.passwordHash)) return { error: "Wrong password" };
     return { ok: true, biz };
   });
   if (result.error) return res.status(401).json({ error: result.error });
-  res.json({ token: sign({ role: "client", businessId: result.biz.id }), role: "client", business: publicBiz(result.biz) });
+  res.json({ token: sign({ role: "client", businessId: result.biz.id, username: result.biz.username || result.biz.id }), role: "client", business: publicBiz(result.biz) });
 });
 
 function publicBiz(b) { const { passcodeHash, passwordHash, ...rest } = b; return rest; }
