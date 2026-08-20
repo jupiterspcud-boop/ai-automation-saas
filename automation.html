@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Automations — AI Automation SaaS</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+  .automation { margin-bottom:14px; }
+  .automation-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
+  .pill { display:inline-block; background:#f2ede6; border-radius:999px; padding:4px 9px; font-size:12px; margin:3px 4px 3px 0; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media(max-width:700px){.row{grid-template-columns:1fr}.automation-head{display:block}}
+  .json-note { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; background:#f7f4ef; padding:10px; border-radius:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="brand">AI Automation <span>Automations</span></div><div class="flex"><span id="tenantLabel"></span><button onclick="goBack()">Dashboard</button></div></div>
+<div class="wrap">
+  <div class="flex between" style="align-items:flex-start"><div><h1>Automation Engine</h1><p class="sub">Create reusable trigger → condition → action workflows for this business.</p></div><button class="btn" onclick="showCreate()">+ New Automation</button></div>
+  <div id="message"></div>
+  <div id="create" class="card" style="display:none; margin:18px 0">
+    <h2 style="margin-top:0">New automation</h2>
+    <div class="row">
+      <div class="field"><label>Name</label><input id="name" type="text" placeholder="Hot lead → follow-up task" /></div>
+      <div class="field"><label>Trigger</label><select id="trigger"></select></div>
+    </div>
+    <div class="field"><label>Description</label><input id="description" type="text" placeholder="What should happen automatically?" /></div>
+    <h2>Condition (optional)</h2>
+    <div class="row">
+      <div class="field"><label>Field</label><input id="conditionField" type="text" placeholder="tier, score, status, source, answer.budget" /></div>
+      <div class="field"><label>Operator</label><select id="operator"></select></div>
+    </div>
+    <div class="field"><label>Value</label><input id="conditionValue" type="text" placeholder="hot or 70 or website_chat" /></div>
+    <h2>Action</h2>
+    <div class="row">
+      <div class="field"><label>Action</label><select id="action"></select></div>
+      <div class="field"><label>Action value</label><input id="actionValue" type="text" placeholder="Task title, tag, or status" /></div>
+    </div>
+    <div class="hint">v1 deliberately executes only internal CRM actions. WhatsApp, email, SMS, voice and webhook delivery will be connected as real provider integrations later.</div>
+    <div class="toolbar" style="margin-top:16px"><button class="btn" onclick="createAutomation()">Create automation</button><button class="btn secondary" onclick="hideCreate()">Cancel</button></div>
+  </div>
+
+  <h2>Active automations</h2>
+  <div id="list"></div>
+  <h2>Recent execution log</h2>
+  <div id="logs"></div>
+</div>
+<script>
+const API = "/api";
+const params = new URLSearchParams(location.search);
+let businessId = params.get("businessId") || localStorage.getItem("clientBizId") || "";
+let token = localStorage.getItem("clientToken") || localStorage.getItem("adminToken") || "";
+let meta = null;
+function headers(){return {Authorization:"Bearer "+token,"Content-Type":"application/json"};}
+function esc(v){return String(v??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
+function showMessage(text,error=false){document.getElementById("message").innerHTML=`<div class="card" style="margin:16px 0;border-color:${error?"#b3261e":"var(--ok)"}">${esc(text)}</div>`;}
+function showCreate(){document.getElementById("create").style.display="block";}
+function hideCreate(){document.getElementById("create").style.display="none";}
+function fill(id,obj){document.getElementById(id).innerHTML=Object.entries(obj).map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("");}
+async function boot(){
+  if(!businessId||!token){showMessage("Open this page from an authenticated Admin/Client dashboard with a business selected.",true);return;}
+  const [metaRes,bizRes]=await Promise.all([fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automation-meta`,{headers:headers()}),fetch(`${API}/businesses/${encodeURIComponent(businessId)}`,{headers:headers()})]);
+  meta=await metaRes.json(); const biz=await bizRes.json();
+  if(metaRes.status===401||bizRes.status===401){showMessage("Session expired. Please log in again.",true);return;}
+  if(biz.error){showMessage(biz.error,true);return;}
+  document.getElementById("tenantLabel").textContent=biz.name;
+  fill("trigger",meta.triggers);fill("operator",meta.operators.reduce((a,k)=>(a[k]=k,a),{}));fill("action",meta.actions);
+  await load();
+}
+async function load(){
+  const [aRes,lRes]=await Promise.all([fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automations`,{headers:headers()}),fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automation-logs`,{headers:headers()})]);
+  const automations=await aRes.json(); const logs=await lRes.json();
+  document.getElementById("list").innerHTML=automations.length?automations.map(renderAutomation).join(""):"<div class='card muted'>No automations yet. Create the first trigger → condition → action workflow.</div>";
+  document.getElementById("logs").innerHTML=logs.length?`<table><tr><th>When</th><th>Automation</th><th>Trigger</th><th>Action</th><th>Lead</th></tr>${logs.map(l=>`<tr><td>${esc(new Date(l.createdAt).toLocaleString())}</td><td>${esc(l.automationId)}</td><td>${esc(l.eventType)}</td><td>${esc(l.actionType)}</td><td>${esc(l.leadId)}</td></tr>`).join("")}</table>`:"<div class='card muted'>No automation executions yet.</div>";
+}
+function renderAutomation(a){
+  const conditions=(a.conditions||[]).map(c=>`<span class="pill">IF ${esc(c.field)} ${esc(c.operator)} ${esc(c.value)}</span>`).join("")||"<span class='pill'>No condition</span>";
+  const actions=(a.actions||[]).map(x=>`<span class="pill">THEN ${esc(x.type)} ${esc(x.config?.status||x.config?.tag||x.config?.title||"")}</span>`).join("");
+  return `<div class="card automation"><div class="automation-head"><div><strong>${esc(a.name)}</strong><div class="hint">${esc(a.description||"No description")}</div><div style="margin-top:8px"><span class="pill">WHEN ${esc(a.trigger)}</span>${conditions}${actions}</div></div><div class="toolbar"><button class="btn small" onclick="testAutomation('${esc(a.id)}')">Test</button><button class="btn secondary small" onclick="toggleAutomation('${esc(a.id)}',${!a.enabled})">${a.enabled?"Disable":"Enable"}</button><button class="btn secondary small" onclick="deleteAutomation('${esc(a.id)}')">Delete</button></div></div><div class="hint">Runs: ${Number(a.runCount||0)} · Last run: ${a.lastRunAt?esc(new Date(a.lastRunAt).toLocaleString()):"Never"}</div></div>`;
+}
+async function createAutomation(){
+  const name=document.getElementById("name").value.trim(); const trigger=document.getElementById("trigger").value; const description=document.getElementById("description").value.trim();
+  const field=document.getElementById("conditionField").value.trim(); const value=document.getElementById("conditionValue").value.trim(); const operator=document.getElementById("operator").value;
+  const action=document.getElementById("action").value; const actionValue=document.getElementById("actionValue").value.trim();
+  if(!name)return showMessage("Automation name is required.",true);
+  const conditions=field?[{field,operator,value}]:[];
+  let config={};
+  if(action==="update_lead_status")config.status=actionValue||"contacted";
+  if(action==="add_tag")config.tag=actionValue||"automation";
+  if(action==="create_task")config.title=actionValue||"Follow up with lead";
+  const res=await fetch(`${API}/businesses/${encodeURIComponent(businessId)}/automations`,{method:"POST",headers:headers(),body:JSON.stringify({name,description,trigger,conditions,actions:[{type:action,config}]})});
+  const data=await res.json(); if(!res.ok)return showMessage(data.error||"Unable to create automation",true);
+  hideCreate();document.getElementById("name").value="";document.getElementById("description").value="";document.getElementById("conditionField").value="";document.getElementById("conditionValue").value="";document.getElementById("actionValue").value="";showMessage("Automation created.");await load();
+}
+async function toggleAutomation(id,enabled){const res=await fetch(`${API}/automations/${encodeURIComponent(id)}`,{method:"PATCH",headers:headers(),body:JSON.stringify({enabled})});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to update automation",true);}await load();}
+async function deleteAutomation(id){if(!confirm("Delete this automation?"))return;const res=await fetch(`${API}/automations/${encodeURIComponent(id)}`,{method:"DELETE",headers:headers()});if(!res.ok){const d=await res.json();return showMessage(d.error||"Unable to delete automation",true);}await load();}
+async function testAutomation(id){const leadId=prompt("Enter a lead ID to test this automation against:");if(!leadId)return;const res=await fetch(`${API}/automations/${encodeURIComponent(id)}/test`,{method:"POST",headers:headers(),body:JSON.stringify({leadId})});const d=await res.json();if(!res.ok)return showMessage(d.error||"Test failed",true);showMessage(`Test complete: ${d.matched||0} automation(s) matched, ${d.executed||0} action(s) executed.`);await load();}
+function goBack(){location.href=localStorage.getItem("clientToken")?"/client.html":"/admin.html";}
+boot();
+</script>
+</body>
+</html>
