@@ -6,7 +6,7 @@ This repository is the **AI Automation SaaS Platform**. Client websites such as 
 
 ## Target product
 
-A multi-tenant platform for an agency/SaaS operator to onboard businesses and give each business its own AI agents, automations, CRM, communication channels, appointments, analytics and billing controls.
+A multi-tenant platform with **one shared AI Automation Core Engine**. Each business/client is a tenant with its own login, data, AI configuration, chatbot flow, automations and enabled modules. The same core engine serves different industries without creating separate applications.
 
 ## Required platform layers
 
@@ -14,6 +14,7 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
    - Admin/agency account
    - Business/tenant onboarding
    - Tenant isolation
+   - Client username/password
    - Packages/plans and module entitlements
    - Team members and roles
    - Settings, audit log and usage limits
@@ -94,10 +95,14 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 ### Already present
 
 - Multi-tenant business records
+- Shared core Express application serving all tenants
 - Admin and client authentication flow
-- Business onboarding and one-time setup passcode
+- Client usernames with backwards-compatible Business ID login
+- One-time client setup passcode and hashed passwords
+- Business onboarding
 - Package metadata
-- Module entitlement toggles
+- Per-tenant module entitlement toggles
+- Client dashboard rendered from enabled modules
 - Niche-based chatbot flows
 - Lead capture and scoring
 - CRM status pipeline
@@ -114,6 +119,9 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - Follow-up task CRUD and task management UI
 - Automated Node test coverage for core automation execution
 - Database transaction queue recovery after failed operations
+- Scheduled/delayed automation jobs
+- Retry and durable failure tracking for automation jobs
+- Tenant architecture documentation
 
 ### Still MVP/mock
 
@@ -124,8 +132,6 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - JSON file storage is not production-grade
 - Authentication still needs production hardening
 - Automation actions currently stop at internal CRM operations; external delivery providers are not connected
-- Scheduled/delayed automation execution is not implemented yet
-- Retry/error state and durable execution jobs are not implemented yet
 
 ## Implementation order
 
@@ -141,8 +147,9 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - [x] Automation execution tests
 - [x] Task/follow-up management UI
 - [x] Appointment-created automation trigger
-- [ ] Scheduled/delayed automation execution
-- [ ] Automation retry/error state
+- [x] Scheduled/delayed automation execution
+- [x] Automation retry/error state
+- [x] Per-tenant username and module-entitlement dashboard
 
 ### Phase 2 — AI agent platform
 
@@ -174,6 +181,10 @@ A multi-tenant platform for an agency/SaaS operator to onboard businesses and gi
 - [ ] Automated tests/CI
 - [ ] Monitoring/backups
 
+## Safe change policy
+
+New customer features must be added as isolated modules, configuration, routes or integrations wherever possible. Existing CRM, chatbot, appointment and automation behavior should not be rewritten for an unrelated feature. Every meaningful change should be committed separately, tested, and kept reversible through Git history.
+
 ## Immediate next step
 
-Finish the remaining automation reliability layer: scheduled/delayed execution plus durable failure/retry tracking. After that, build the tenant-specific AI knowledge/agent layer. Provider integrations come only after the internal automation model is stable.
+Build the tenant-specific **AI Knowledge Base + Agent Configuration** layer on top of the shared core. The knowledge/agent configuration must be tenant-scoped so one client's business information can never be used as another client's context.
