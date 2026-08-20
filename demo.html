@@ -15,19 +15,28 @@
 </head>
 <body>
   <div class="hero">
-    <h1>Green Acres Realty</h1>
+    <h1 id="business-name">Green Acres Realty</h1>
     <p>This is a mock client website. The orange chat bubble bottom-right is your embedded AI Automation widget — try it.</p>
   </div>
   <div class="note card">
-    <p class="sub" style="margin-bottom:6px">To point this demo at a real business:</p>
-    <ol style="font-size:14px; color:var(--gray)">
-      <li>Create a business in <a href="/admin.html">the Admin dashboard</a>.</li>
-      <li>Copy its Business ID.</li>
-      <li>Replace <code>data-business-id</code> below with that ID.</li>
-    </ol>
+    <p class="sub" style="margin-bottom:6px">Demo business:</p>
+    <p style="font-size:14px; color:var(--gray)">The chatbot loads the business selected in the URL. If no business ID is supplied, the built-in <code>green-acres-realty</code> demo is used.</p>
   </div>
 
-  <!-- The actual embed a client would paste on their real website: -->
-  <script src="/widget.js" data-business-id="DEMO_BUSINESS_ID"></script>
+  <script>
+    // Supports /demo?business=BUSINESS_ID. Never use a display name as the ID.
+    const params = new URLSearchParams(location.search);
+    const requestedBusiness = (params.get('business') || '').trim();
+    const businessId = requestedBusiness || 'green-acres-realty';
+
+    // If an old/shared link contains the placeholder value "Business",
+    // fall back to the working demo instead of requesting a non-existent tenant.
+    const resolvedBusinessId = /^business$/i.test(businessId) ? 'green-acres-realty' : businessId;
+
+    const widget = document.createElement('script');
+    widget.src = '/widget.js';
+    widget.dataset.businessId = resolvedBusinessId;
+    document.body.appendChild(widget);
+  </script>
 </body>
 </html>
